@@ -93,9 +93,8 @@ RunView_atend()
 
   for ( int i=0; i<ntimers; i++ )
     {
-      CCTK_TimerI(i, td);
       const char *name = CCTK_TimerName(i);
-      assert ( td );
+      CCTK_TimerI(i, td);
       const cTimerVal* const tv = CCTK_GetClockValueI(0, td);
       const double timer_secs = CCTK_TimerClockSeconds(tv);
       if ( show_all_timers ) printf("%10.6f %s\n",timer_secs,name);
