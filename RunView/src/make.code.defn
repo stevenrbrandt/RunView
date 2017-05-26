@@ -1,7 +1,7 @@
 # Main make.code.defn file for thorn RunView -*- makefile -*-
 
 # Source files in this directory
-SRCS = runview.cc util.cc ctimers.cc rv_papi.cc
+SRCS = runview.cc
 
 # Subdirectories containing source files
 SUBDIRS = 
