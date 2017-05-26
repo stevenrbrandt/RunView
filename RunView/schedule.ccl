@@ -1,0 +1,12 @@
+# Schedule definitions for thorn RunView
+
+
+  SCHEDULE RunView_init at CCTK_STARTUP
+  {
+    LANG: C
+  } "Initialize performance data collection."
+
+  SCHEDULE RunView_atend in CCTK_SHUTDOWN
+  {
+    LANG: C
+  } "Report performance information."

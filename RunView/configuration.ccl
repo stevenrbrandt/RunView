@@ -1,0 +1,6 @@
+# Configuration definitions for thorn RunView
+
+PROVIDES RunView
+{
+}
+
