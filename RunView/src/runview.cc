@@ -9,6 +9,7 @@
 #include <string>
 #include <errno.h>
 #include <string.h>
+#include "ctimers.h"
 #include "util.h"
 
 using namespace std;
@@ -66,7 +67,7 @@ public:
 };
 
 RV_Data rv_data;
-
+RV_CTimers rv_ctimers;
 
 
 
@@ -75,6 +76,7 @@ RunView_init()
 {
   DECLARE_CCTK_PARAMETERS;
   printf("Hello from init.\n");
+  rv_ctimers.init();
 
   return 0;
 }
@@ -90,25 +92,39 @@ RunView_atend()
 int
 RV_Data::atend()
 {
-  const bool show_all_timers = false;
+  const bool show_all_timers = true;
 
   const int ntimers = CCTK_NumTimers();
   cTimerData* const td = CCTK_TimerCreateData();
 
+  const int nclocks = CCTK_NumClocks();
+
   if ( show_all_timers )
-    printf("Found %d timers.\n", ntimers);
+    {
+      printf("Found %d timers.\n", ntimers);
+      printf("Found %zd events.\n", rv_ctimers.events.size());
+      for ( int i=0; i<nclocks; i++ )
+        printf("Clock %d: %s\n",i,CCTK_ClockName(i));
+    }
 
   for ( int i=0; i<ntimers; i++ )
     {
       const char *name = CCTK_TimerName(i);
-      CCTK_TimerI(i, td);
-      const cTimerVal* const tv = CCTK_GetClockValueI(0, td);
-      const double timer_secs = CCTK_TimerClockSeconds(tv);
-      if ( show_all_timers ) printf("%10.6f %s\n",timer_secs,name);
+      const RV_CTimer& t = rv_ctimers.get(i);
 
+      if ( show_all_timers )
+        {
+          CCTK_TimerI(i, td);
+          const cTimerVal* const tv =
+            CCTK_GetClockValue("cycle", td) ?: CCTK_GetClockValueI(0, td);
+          const double timer_secs = CCTK_TimerClockSeconds(tv);
+          const double delta = fabs(timer_secs - t.duration_s) * 1e6;
+          printf("%10.6f %3.0f µs %s %3d %s\n",
+                 timer_secs, delta, tv->heading, t.missequence_count, name);
+        }
       Strings pieces = split(name,'/');
       if ( pieces[0] != "main" ) continue;
-      timer_tree.insert(pieces,0,timer_secs);
+      timer_tree.insert(pieces,0,t.duration_s);
     }
 
   CCTK_TimerDestroyData(td);
@@ -201,10 +217,11 @@ RV_Data::generate_graph_simple()
 
       double pseudo_time_start = nd->pseudo_time_start;
 
-      printf
-        ("%10.6f %10.6f %10.6f %s %s\n",
-         nd->dur_node_s, nd->dur_kids_s, pseudo_time_start,
-         string(nd->level*2,' ').c_str(), nd->name.c_str());
+      if ( false )
+        printf
+          ("%10.6f %10.6f %10.6f %s %s\n",
+           nd->dur_node_s, nd->dur_kids_s, pseudo_time_start,
+           string(nd->level*2,' ').c_str(), nd->name.c_str());
 
       for ( auto& pair: nd->children )
         {
@@ -219,7 +236,7 @@ RV_Data::generate_graph_simple()
 
   const double scale_y = plot_area_hpt / max_time;
   const double scale_x = plot_area_wpt / ( max_level + 1 );
-  const int width_char = scale_x / font_size;  // Approximate width.
+  const int width_char = 1.5 * scale_x / font_size;  // Approximate width.
 
   stack.push_back(&timer_tree);
   while ( stack.size() )
@@ -229,16 +246,13 @@ RV_Data::generate_graph_simple()
       const double ht = nd->dur_node_s * scale_y;
 
       rect( nd->level * scale_x, nd->pseudo_time_start * scale_y, scale_x, ht );
+      string name = escapeForXML( nd->name.substr(0,width_char) );
 
-      // WARNING: Text in nd->name should be escaped before (for <> and
-      // possibly other characters).  Also, the condition below is too
-      // strict, if the name is too long then a shortened version can
-      // be prepared. Or it can be rotated.
-      if ( nd->name.size() <= width_char && ht >= font_size * 1.2 )
+      if ( ht >= font_size * 1.2 )
         fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%s</text>\n",
                 font_size + nd->level * scale_x,
                 font_size + nd->pseudo_time_start * scale_y,
-                nd->name.c_str());
+                name.c_str());
 
       for ( auto& pair: nd->children ) stack.push_back(&pair.second);
     }
