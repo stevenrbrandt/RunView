@@ -35,6 +35,7 @@ public:
   RV_CTimer& get(int cactus_timer_index);
 
   std::vector<RV_Timer_Event> events;
+  double epoch_s;
 private:
   std::vector<RV_CTimer> timers;
   size_t num_events; // Number of events reflected in timers. See timers_update.

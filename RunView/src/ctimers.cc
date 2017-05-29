@@ -4,7 +4,8 @@
 
 
 RV_Timer_Event::RV_Timer_Event(int idx, RV_Event_Type et):
-    event_time_s(time_wall_fp()),timer_index(idx),event_type(et)
+    event_time_s( time_wall_fp() - rv_ctimers.epoch_s ),
+    timer_index(idx), event_type(et)
 {
 }
 
@@ -14,6 +15,8 @@ RV_CTimers::init()
   assert( this == &rv_ctimers );
 
   static const char* const clock_name = "RunView";
+
+  epoch_s = time_wall_fp();
 
   cClockFuncs funcs;
   funcs.n_vals = 1;
