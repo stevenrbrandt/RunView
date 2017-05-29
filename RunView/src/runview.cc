@@ -63,6 +63,7 @@ public:
   int atend();
   void generate_text_tree();
   void generate_graph_simple();
+  void generate_timeline_simple();
   RV_Timer_Node timer_tree;
 };
 
@@ -131,6 +132,7 @@ RV_Data::atend()
 
   generate_text_tree();
   generate_graph_simple();
+  generate_timeline_simple();
 
   return 0;
 }
@@ -255,6 +257,186 @@ RV_Data::generate_graph_simple()
                 name.c_str());
 
       for ( auto& pair: nd->children ) stack.push_back(&pair.second);
+    }
+
+  fprintf(fh,"%s","</g></svg>\n");
+  fclose(fh);
+}
+
+void
+RV_Data::generate_timeline_simple()
+{
+  DECLARE_CCTK_PARAMETERS;
+
+  string svg_file_path = string(out_dir) + "/run-view-timeline.svg";
+  FILE* const fh = fopen(svg_file_path.c_str(), "w");
+  if ( !fh )
+    {
+      CCTK_VWarn
+        (CCTK_WARN_ALERT, __LINE__,__FILE__, CCTK_THORNSTRING,
+         "Could not open RunView output file \"%s\" for output: %s\n",
+         svg_file_path.c_str(), strerror(errno));
+      return;
+    }
+
+  CCTK_VInfo
+    (CCTK_THORNSTRING,
+     "Writing RunView timeline plot to file \"%s\"\n", svg_file_path.c_str());
+
+  const int ntimers = CCTK_NumTimers();
+
+  //
+  // Identify timer-tree timers (participants) and extract their leaf names.
+  //
+  // For example:
+  //
+  //  Timer main/CarpetStartup/CheckRegions is a tree timer, its
+  //   leaf name is CheckRegions.
+  //
+  //  Timer [0017] SymBase: SymBase_Startup in CCTK_STARTUP is not a tree timer.
+  //
+  vector<bool> participant(ntimers);
+  vector<string> leaf_name(ntimers);
+  for ( int i=0; i<ntimers; i++ )
+    {
+      Strings pieces = split(CCTK_TimerName(i),'/');
+      leaf_name[i] = pieces.back();
+      if ( pieces[0] == "main" ) participant[i] = true;
+    }
+
+  //
+  // Structure and container for holding information on segments to plot.
+  //
+  // There is a segment for each time a timer is stopped. It will be
+  // plotted as a rectangle with the left side based on the timer
+  // start time and the right side based on the timer stop time.
+  //
+  struct Seg_Info {
+    Seg_Info(int ti, int l, double ss, double es):
+      timer_idx(ti), level(l), start_s(ss), end_s(es){};
+    int timer_idx, level;
+    double start_s, end_s;
+  };
+  vector<Seg_Info> seg_info;
+
+  // Maximum depth of tree.
+  int max_level = 0;
+
+  // List of start events for currently active timers.
+  //
+  vector<RV_Timer_Event*> timer_stack = { NULL };
+
+  for ( auto& ev: rv_ctimers.events )
+    {
+      const int idx = ev.timer_index;
+      if ( ! participant[idx] ) continue;
+
+      RV_Timer_Event* const ev_last = timer_stack.back();
+
+      switch ( ev.event_type ) {
+
+      case RET_Timer_Start:
+        // Push timer on to list of active timers.
+        timer_stack.push_back(&ev);
+        set_max(max_level,timer_stack.size()); // Keep track of max # timers.
+        break;
+
+      case RET_Timer_Stop:
+        // Pop timer from list of active timers and add new segment to list.
+        assert( ev_last->timer_index == idx );
+        timer_stack.pop_back();
+        seg_info.emplace_back
+          (idx,timer_stack.size(),ev_last->event_time_s,ev.event_time_s);
+        break;
+
+      case RET_Timer_Reset: break;
+
+      default: assert( false );
+      }
+    }
+
+
+  //
+  /// Write SVG Image of Segments
+  //
+
+  const double font_size = 10;  // All units in points.
+  const double baselineskip_pt = font_size * 1.5;
+
+  // Plot Area (area holding segments) Width
+  //
+  const double plot_area_wpt = 1000;
+
+  // Compute scale factors.
+  //
+  // Seconds to Points
+  const double s_to_pt = plot_area_wpt / seg_info.back().end_s;
+  //
+  // Level to Point
+  const double level_ht_lines = 2;
+  const double level_to_pt = level_ht_lines * baselineskip_pt;
+
+  // Height of a Segment.
+  const double seg_hpt = level_to_pt;
+
+  // Plot Area (area holding segments) Height
+  //
+  const double plot_area_hpt = max_level * level_to_pt;
+
+  // Note: Currently image only contains plot. Later, add at least an
+  // x-axis scale showing time.
+  //
+  const double image_wpt = plot_area_wpt;
+  const double image_hpt = plot_area_hpt;
+
+  fprintf(fh,"%s",
+          "<?xml version=\"1.0\" standalone=\"no\"?>\n"
+          "<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\"\n"
+          "  \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n");
+
+  // Set SVG so that one user unit is one point. This is assuming that
+  // user has adjusted font rendering so that a ten-point font is the
+  // smallest size that's comfortably readable for substantial amounts
+  // of text.
+  //
+  fprintf(fh,"<svg width=\"%.3fpt\" height=\"%.3fpt\"\n"
+          "viewBox=\"0 0 %.3f %.3f\"\n"
+          "version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\">\n",
+          image_wpt, image_hpt, image_wpt, image_hpt);
+
+  fprintf(fh,"%s\n","<desc>Created by RunView</desc>");
+
+  // Make background of plot area gray.
+  //
+  fprintf
+    (fh,
+     "<rect x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" "
+     "fill=\"#bbb\" stroke=\"none\"/>\n",
+     0.0, 0.0, plot_area_wpt, plot_area_hpt);
+
+  fprintf(fh,"<g font-size=\"%.3f\" font-family=\"sans-serif\" "
+          "stroke-width=\"0.2\">\n", font_size);
+
+  // Generate SVG for individual segments.
+  //
+  for ( auto& s: seg_info )
+    {
+      const double xpt = s.start_s * s_to_pt;
+      const double ypt = s.level * level_to_pt;
+      const double wpt = ( s.end_s - s.start_s ) * s_to_pt;
+
+      fprintf(fh, "<rect fill=\"white\" stroke=\"black\" "
+              "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n",
+              xpt, ypt, wpt, seg_hpt);
+
+      // Estimate width assuming that character width is font_size/1.2.
+      const int width_char = 1.2 * wpt / font_size;
+
+      if ( width_char < 2 ) continue;
+
+      string name = escapeForXML( leaf_name[s.timer_idx].substr(0,width_char) );
+      fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%s</text>\n",
+              xpt + 0.5*font_size, ypt + font_size, name.c_str() );
     }
 
   fprintf(fh,"%s","</g></svg>\n");
