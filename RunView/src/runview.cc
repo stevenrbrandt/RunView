@@ -31,9 +31,40 @@ public:
   }
   void insert(Strings& path, int levelp, double time)
     {
-      if ( name.size() == 0 ) { level = levelp; name = path[level-1]; }
-      else if ( level ) assert( name == path[level-1] );
+      // Add node at LEVELP for timer described by PATH with duration
+      // TIME.
+      //
+      // Example:
+      //
+      //   Consider two timers: main/a and main/a/b
+      //
+      //   Calling root.insert( {main,a}, 0, 10.1 )
+      //     Adds nodes:
+      //      name: main, level: 0, dur_node_s: not set, dur_kid_s: 10.1
+      //      name: a,    level: 1, dur_node_s: 10.1
+      //
+      //   Calling root.insert( {main,a,b}, 0, 20.2 )
+      //     Adds new node:
+      //      name: b,    level: 2, dur_node_s: 20.2
+      //     And updates exiting node:
+      //      name: a,    level: 1, dur_kid_s: 20.2
 
+      if ( name.size() == 0 )
+        {
+          // This is the first time this node has been visited.
+          // Initialize the level and name components.
+          level = levelp;
+          name = path[level-1];
+        }
+      else if ( level )
+        {
+          // This node has been visited before, make sure the names match.
+          assert( name == path[level-1] );
+        }
+
+      // Check if this is the leaf node for the timer. If so,
+      // record the time and end recursion.
+      //
       if ( path.size() == level )
         {
           assert( !dur_node_set );
@@ -42,7 +73,13 @@ public:
           return;
         }
 
+      // Check if this is the parent of the leaf node of the timer.
+      // If so, collect time of children.
+      //
       if ( path.size() == level + 1 ) dur_kids_s += time;
+
+      // Insert a node for next component.
+      //
       children[path[level]].insert(path,level+1,time);
     }
 
@@ -51,9 +88,13 @@ public:
 
   double pseudo_time_start;  // Start time, set for a particular image.
 
+  // Component of timer name. For example, for timer
+  // main/Evolve/PrintTimers there would be three nodes, named main,
+  // Evolve, and PrintTimers, at levels 1, 2, and 3, respectively.
   string name;
   int level;
-  bool dur_node_set;
+
+  bool dur_node_set;  // If true, dur_node_s set to some value.
   map<string,RV_Timer_Node> children;
 };
 
@@ -76,7 +117,14 @@ CCTK_INT
 RunView_init()
 {
   DECLARE_CCTK_PARAMETERS;
+
+  // A message providing reassurance to a beginner becoming familiar with
+  // the code. Delete the message when no longer necessary.
+  //
   printf("Hello from init.\n");
+
+  // Initialize the collection of timer event data
+  //
   rv_ctimers.init();
 
   return 0;
@@ -85,6 +133,9 @@ RunView_init()
 CCTK_INT
 RunView_atend()
 {
+
+  // Print runview timer data.
+  //
   return rv_data.atend();
 }
 
@@ -93,11 +144,18 @@ RunView_atend()
 int
 RV_Data::atend()
 {
+  /// Print Timer Data
+
+  // If true, show lots of data.  Intended for debugging and
+  // familiarization.
+  //
   const bool show_all_timers = true;
 
   const int ntimers = CCTK_NumTimers();
   cTimerData* const td = CCTK_TimerCreateData();
 
+  // Note: Each timer has multiple clocks. In most cases a clock
+  // measures time and so only one would be necessary.
   const int nclocks = CCTK_NumClocks();
 
   if ( show_all_timers )
@@ -108,21 +166,63 @@ RV_Data::atend()
         printf("Clock %d: %s\n",i,CCTK_ClockName(i));
     }
 
+  // Organize timer data into a tree, timer_tree.
+  //
   for ( int i=0; i<ntimers; i++ )
     {
       const char *name = CCTK_TimerName(i);
+
+      // Get RunView-collected data for timer i.
+      //
       const RV_CTimer& t = rv_ctimers.get(i);
 
       if ( show_all_timers )
         {
+          // Print out information about each timer.
+          // Intended for debugging and familiarization.
+          //
+
+          // Copy info for timer i into td.
           CCTK_TimerI(i, td);
+
+          // Extract the timer value for our preferred clock, "cycle",
+          // or clock zero if cycle isn't found.
+          //
           const cTimerVal* const tv =
             CCTK_GetClockValue("cycle", td) ?: CCTK_GetClockValueI(0, td);
           const double timer_secs = CCTK_TimerClockSeconds(tv);
+
+          // Compare duration of the RunView clock with the clock used
+          // above.
           const double delta = fabs(timer_secs - t.duration_s) * 1e6;
           printf("%10.6f %3.0f µs %s %3d %s\n",
                  timer_secs, delta, tv->heading, t.missequence_count, name);
         }
+
+      //
+      // Check whether timer is a tree timer. A timer is considered a
+      // tree timer if its name is of the form
+      // main/PARTA/PARTB/.../LEAFPAR, where PARTA, etc., consist of
+      // alphanumeric characters.
+      //
+      // For example:
+      //
+      //  Timer main/CarpetStartup/CheckRegions is a tree timer, its
+      //   leaf name is CheckRegions.
+      //
+      //  Timer [0017] SymBase: SymBase_Startup in CCTK_STARTUP is not
+      //  a tree timer.
+      //
+      // This code assumes that the start and stop events for tree
+      // timers properly nest and do so as suggested by their
+      // names. For example, consider timers main/a, main/a/b, and
+      // main/a/c. The following is a proper nesting: start-main/a,
+      // start-main/a/b stop-main/a/b, start-main/a/c, stop-main/a/c,
+      // stop-main/a. The following *is not* a proper nesting:
+      // start-main/a, start-main/a/b stop-main/a stop-main/a/b,
+      // start-main/a/c, stop-main/a/c; it's improper because
+      // stop-main/a occurred while main-a/b was still running.
+      //
       Strings pieces = split(name,'/');
       if ( pieces[0] != "main" ) continue;
       timer_tree.insert(pieces,0,t.duration_s);
@@ -130,6 +230,8 @@ RV_Data::atend()
 
   CCTK_TimerDestroyData(td);
 
+  // Write out text and graphical representations of timer trees.
+  //
   generate_text_tree();
   generate_graph_simple();
   generate_timeline_simple();
@@ -141,8 +243,11 @@ RV_Data::atend()
 void
 RV_Data::generate_text_tree()
 {
-  vector<RV_Timer_Node*> stack;
-  stack.push_back(&timer_tree);
+  // Write out a text representation of timer tree.
+
+  // Put root of tree on stack.
+  vector<RV_Timer_Node*> stack = { &timer_tree };
+
   while ( stack.size() )
     {
       RV_Timer_Node* const nd = stack.back();  stack.pop_back();
@@ -159,8 +264,16 @@ RV_Data::generate_text_tree()
 void
 RV_Data::generate_graph_simple()
 {
+  // Write out SVG image showing timer values.
+
+  // Declare Cactus parameters. (Needed for out_dir.)
   DECLARE_CCTK_PARAMETERS;
+
   string svg_file_path = string(out_dir) + "/run-view.svg";
+  //
+  // Note: out_dir is directory in which to write output for this
+  // Cactus run.
+
   FILE* const fh = fopen(svg_file_path.c_str(), "w");
 
   if ( !fh )
@@ -175,20 +288,35 @@ RV_Data::generate_graph_simple()
   CCTK_VInfo
     (CCTK_THORNSTRING,
      "Writing RunView plot to file \"%s\"\n", svg_file_path.c_str());
+  //
+  // Note: This is the correct way to print messages in Cactus.
 
   const double font_size = 10;  // All units in points.
+
+  // Dimension of entire SVG graphic.
+  //
   const double image_wpt = 800;
   const double image_hpt = 600;
 
+  // Compute dimensions of plot area.
+  //
   const double plot_area_left_xpt = 5;
   const double plot_area_top_ypt = 5;
   const double plot_area_wpt = image_wpt - 2 * plot_area_left_xpt;
   const double plot_area_hpt = image_hpt - 2 * plot_area_top_ypt;
 
+  // Write SVG Header
+  //
   fprintf(fh,"%s",
           "<?xml version=\"1.0\" standalone=\"no\"?>\n"
           "<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\"\n"
           "  \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n");
+
+  // Set SVG so that one user unit is one point. This is assuming that
+  // user has adjusted font rendering so that a ten-point font is the
+  // smallest size that's comfortably readable for substantial amounts
+  // of text.
+  //
   fprintf(fh,"<svg width=\"%.3fpt\" height=\"%.3fpt\"\n"
           "viewBox=\"0 0 %.3f %.3f\"\n"
           "version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\">\n",
@@ -198,25 +326,38 @@ RV_Data::generate_graph_simple()
   fprintf(fh,"<g font-size=\"%.3f\" font-family=\"sans-serif\">\n",
           font_size);
 
+  // Convenience function for emitting SVG rectangles.
+  //
   auto rect = [&](double x, double y, double w, double h)
-    {
-      fprintf(fh, "<rect fill=\"none\" stroke=\"black\" "
+    { fprintf(fh, "<rect fill=\"none\" stroke=\"black\" "
               "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n",
-              x, y, w, h);
-    };
+              x, y, w, h); };
 
+  // Emit a box around the entire plot area.
+  //
   rect( plot_area_left_xpt, plot_area_top_ypt, plot_area_wpt, plot_area_hpt);
 
   double max_time = 0;
   int max_level = 0;
 
-  vector<RV_Timer_Node*> stack;
+
+  //
+  // Determine y-axis position, pseudo_time_start, for each node in
+  // timer tree. The value for pseudo_time_start is computed assuming
+  // that each timer has one start/stop pair with dur_node_s the
+  // duration from the start to the stop.  Also determine the height
+  // of the tree.
+  //
+
+  vector<RV_Timer_Node*> stack = { &timer_tree };
   timer_tree.pseudo_time_start = 0;
-  stack.push_back(&timer_tree);
+
   while ( stack.size() )
     {
       RV_Timer_Node* const nd = stack.back();  stack.pop_back();
 
+      // Get this node's pseudo_time_start, which was set by its parent.
+      //
       double pseudo_time_start = nd->pseudo_time_start;
 
       if ( false )
@@ -225,35 +366,54 @@ RV_Data::generate_graph_simple()
            nd->dur_node_s, nd->dur_kids_s, pseudo_time_start,
            string(nd->level*2,' ').c_str(), nd->name.c_str());
 
+      // Set the pseudo_time_start members of this node's children.
+      //
       for ( auto& pair: nd->children )
         {
           RV_Timer_Node* const ch = &pair.second;
           ch->pseudo_time_start = pseudo_time_start;
-          pseudo_time_start += ch->dur_node_s;
+
+          // Push ch on the stack so pseudo_time_start can be set for
+          // its children.
+          //
           stack.push_back(ch);
+
+          // Get time for the next sibling of ch.
+          //
+          pseudo_time_start += ch->dur_node_s;
         }
-      if ( pseudo_time_start > max_time ) max_time = pseudo_time_start;
-      if ( nd->level > max_level ) max_level = nd->level;
+
+      set_max( max_time, pseudo_time_start );
+      set_max( max_level, nd->level );
     }
 
-  const double scale_y = plot_area_hpt / max_time;
-  const double scale_x = plot_area_wpt / ( max_level + 1 );
-  const int width_char = 1.5 * scale_x / font_size;  // Approximate width.
+  // Compute scale factors
+  //
+  // Seconds to points.
+  const double s_to_pt = plot_area_hpt / max_time;
+  //
+  // Level to points.
+  const double level_to_pt = plot_area_wpt / ( max_level + 1 );
 
+  const int width_char = 1.5 * level_to_pt / font_size;  // Approximate width.
+
+  // Traverse tree again, this time emit a rectangle for each tree node.
+  //
   stack.push_back(&timer_tree);
   while ( stack.size() )
     {
       RV_Timer_Node* const nd = stack.back();  stack.pop_back();
 
-      const double ht = nd->dur_node_s * scale_y;
+      const double ht = nd->dur_node_s * s_to_pt;
 
-      rect( nd->level * scale_x, nd->pseudo_time_start * scale_y, scale_x, ht );
+      rect( nd->level * level_to_pt, nd->pseudo_time_start * s_to_pt,
+            level_to_pt, ht );
       string name = escapeForXML( nd->name.substr(0,width_char) );
 
       if ( ht >= font_size * 1.2 )
         fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%s</text>\n",
-                font_size + nd->level * scale_x,
-                font_size + nd->pseudo_time_start * scale_y,
+                font_size + nd->level * level_to_pt,
+                font_size + nd->pseudo_time_start * s_to_pt,
                 name.c_str());
 
       for ( auto& pair: nd->children ) stack.push_back(&pair.second);
