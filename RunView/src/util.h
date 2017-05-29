@@ -5,6 +5,13 @@
 #include <string>
 #include <time.h>
 
+template<typename T> bool
+set_min(T& lhs, T rhs)
+{ if ( rhs < lhs ) { lhs = rhs; return true; } return false; }
+template<typename T1, typename T2> bool
+set_max(T1& lhs, T2 rhs)
+{ if ( rhs > lhs ) { lhs = rhs; return true; } return false; }
+
 typedef std::vector<std::string> Strings;
 
 Strings split(const char *cs, char sep);
