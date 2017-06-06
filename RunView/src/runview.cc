@@ -149,7 +149,7 @@ RV_Data::atend()
   // If true, show lots of data.  Intended for debugging and
   // familiarization.
   //
-  const bool show_all_timers = true;
+  const bool show_all_timers = false;
 
   const int ntimers = CCTK_NumTimers();
   cTimerData* const td = CCTK_TimerCreateData();
