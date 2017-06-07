@@ -7,6 +7,7 @@
 #include <vector>
 #include <map>
 #include <string>
+#include <sstream>
 #include <errno.h>
 #include <string.h>
 #include "ctimers.h"
@@ -85,6 +86,8 @@ public:
 
   double dur_node_s;  // Duration recorded by Cactus timer.
   double dur_kids_s;  // Sum of durations of immediate children.
+  double percent_op;  // Percent of parent, set by immediate parent
+  double percent_pp;  // percent of the program runtime that is dedicated to this node 
 
   double pseudo_time_start;  // Start time, set for a particular image.
 
@@ -102,6 +105,7 @@ class RV_Data {
 public:
   RV_Data():timer_tree("root"){};
   int atend();
+  double generate_rect(double x, double y, double w, double scaler, double Psize, RV_Timer_Node* curr, FILE* fh);
   void generate_text_tree();
   void generate_graph_simple();
   void generate_timeline_simple();
@@ -239,6 +243,44 @@ RV_Data::atend()
   return 0;
 }
 
+double 
+RV_Data::generate_rect(double x, double y, double w, double scaler, double Psize, RV_Timer_Node* curr, FILE* fh) 
+{
+  double t, h; 
+  
+  h = Psize *( curr->percent_op/100); 
+
+  // making rectangles and coloring based on runtime
+  if (curr->percent_pp < .5) {
+      fprintf(fh, "<rect fill=\"rgb(150, 150, 220)\" stroke=\"black\" "
+           "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n",x, y, w, h);
+  } else if (curr->percent_pp < 10) {
+      fprintf(fh, "<rect fill=\"rgb(40, 40, 150)\" stroke=\"black\" "
+           "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n",x, y, w, h);
+  } else {
+      fprintf(fh, "<rect fill=\"red\" stroke=\"black\" "
+              "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n",
+              x, y, w, h);
+  }
+
+  // printing the text
+  if ( h >= 20 ) {
+    fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%s:</text>\n", x+4, y+10, curr->name.c_str());
+        fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%% %.3f</text>\n",
+                x+6, y+20, curr->percent_pp);
+  }
+
+  // drawing rectangles of children
+  for (auto& temp: curr->children) {
+    RV_Timer_Node* const ch = &temp.second;
+    x = ch->level*scaler; 
+    t = generate_rect(x,y,w,scaler,h,ch, fh);
+    y += t;
+  }
+
+  return h;
+}
+
 
 void
 RV_Data::generate_text_tree()
@@ -302,8 +344,8 @@ RV_Data::generate_graph_simple()
   //
   const double plot_area_left_xpt = 5;
   const double plot_area_top_ypt = 5;
-  const double plot_area_wpt = image_wpt - 2 * plot_area_left_xpt;
-  const double plot_area_hpt = image_hpt - 2 * plot_area_top_ypt;
+  const double plot_area_wpt = image_wpt -2 * plot_area_left_xpt;
+  const double plot_area_hpt = image_hpt -2 * plot_area_top_ypt;
 
   // Write SVG Header
   //
@@ -326,16 +368,14 @@ RV_Data::generate_graph_simple()
   fprintf(fh,"<g font-size=\"%.3f\" font-family=\"sans-serif\">\n",
           font_size);
 
-  // Convenience function for emitting SVG rectangles.
-  //
+  // Convenience functions for emitting SVG rectangles.
   auto rect = [&](double x, double y, double w, double h)
-    { fprintf(fh, "<rect fill=\"none\" stroke=\"black\" "
+    { fprintf(fh, "<rect fill=\"gray\" stroke=\"black\" "
               "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n",
               x, y, w, h); };
 
   // Emit a box around the entire plot area.
-  //
-  rect( plot_area_left_xpt, plot_area_top_ypt, plot_area_wpt, plot_area_hpt);
+  // rect( plot_area_left_xpt, plot_area_top_ypt, plot_area_wpt-4, plot_area_hpt);
 
   double max_time = 0;
   int max_level = 0;
@@ -352,6 +392,17 @@ RV_Data::generate_graph_simple()
   vector<RV_Timer_Node*> stack = { &timer_tree };
   timer_tree.pseudo_time_start = 0;
 
+  // NOT A ROBUST SYSTEM YET. ONLY WORKS IF CHILD OF ROOT IS CALLED MAIN--WHICH MAY NOT ALWAYS BE THE CASE? 
+  timer_tree.dur_node_s = timer_tree.dur_kids_s; 
+  RV_Timer_Node* main = &timer_tree.children.find("main")->second; 
+  double total_time = main->dur_kids_s; 
+  main->dur_node_s = main->dur_kids_s; 
+ 
+  printf("node: %s  ", main->name.c_str());
+  printf("dur: %.3f  ", main->dur_node_s);
+  printf("dur of chil: %.3f  ", main->dur_kids_s); 
+   
+
   while ( stack.size() )
     {
       RV_Timer_Node* const nd = stack.back();  stack.pop_back();
@@ -366,12 +417,18 @@ RV_Data::generate_graph_simple()
            nd->dur_node_s, nd->dur_kids_s, pseudo_time_start,
            string(nd->level*2,' ').c_str(), nd->name.c_str());
 
+       nd->percent_pp = ((nd->dur_node_s - nd->dur_kids_s)/total_time)*100; 
+
       // Set the pseudo_time_start members of this node's children.
       //
       for ( auto& pair: nd->children )
         {
           RV_Timer_Node* const ch = &pair.second;
           ch->pseudo_time_start = pseudo_time_start;
+
+	  // calculating relevant percentages
+	  ch->percent_op = (ch->dur_node_s / nd->dur_node_s)*100;
+	 
 
           // Push ch on the stack so pseudo_time_start can be set for
           // its children.
@@ -387,6 +444,9 @@ RV_Data::generate_graph_simple()
       set_max( max_level, nd->level );
     }
 
+  main->dur_node_s = 0; 
+  
+
   // Compute scale factors
   //
   // Seconds to points.
@@ -397,28 +457,60 @@ RV_Data::generate_graph_simple()
 
   const int width_char = 1.5 * level_to_pt / font_size;  // Approximate width.
 
+  // setting up main for drawRectangles function
+   main->percent_op = 100; 
+
+   // drawing root rect
+   fprintf(fh, "<rect fill=\"rgb(150, 150, 220)\" stroke=\"black\" "
+           "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n",plot_area_left_xpt,  plot_area_top_ypt, level_to_pt, plot_area_hpt);
+   fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%s:</text>\n", plot_area_left_xpt+4, plot_area_top_ypt+10, timer_tree.name.c_str());
+   // drawing line to mark end of figure
+   fprintf(fh, "<line x1=\"%.3f\" y1=\"%.3f\" x2=\"%.3f\" y2=\"%.3f\"/>\n", plot_area_wpt, plot_area_top_ypt, plot_area_wpt, plot_area_hpt);
+
+   // drawing rectangles
+   double ta = generate_rect(main->level * level_to_pt, plot_area_top_ypt,level_to_pt,level_to_pt, plot_area_hpt, main, fh); 
+
   // Traverse tree again, this time emit a rectangle for each tree node.
-  //
-  stack.push_back(&timer_tree);
-  while ( stack.size() )
+  // paste code back here...
+  // stack.push_back(&timer_tree);
+
+   /*
+    while ( stack.size() )
     {
-      RV_Timer_Node* const nd = stack.back();  stack.pop_back();
+   RV_Timer_Node* const nd = stack.back();  stack.pop_back();
 
       const double ht = nd->dur_node_s * s_to_pt;
 
-      rect( nd->level * level_to_pt, nd->pseudo_time_start * s_to_pt,
-            level_to_pt, ht );
-      string name = escapeForXML( nd->name.substr(0,width_char) );
+      // Declaring temporary variables for respecting limits
+      int x = nd->level * level_to_pt;
+      int y = nd->pseudo_time_start  * s_to_pt;
+      int w = level_to_pt;
+      int h = ht; 
 
-      if ( ht >= font_size * 1.2 )
-        fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%s</text>\n",
+      //  Write svg for rectangle
+      if (nd->percent_pp < 10) {
+	rect(x,y,w,h);
+      } else {
+	red_rect(x,y,w,h); 
+      }
+      string name = escapeForXML( nd->name.substr(0,width_char) );  
+      double percent =  nd->percent_op;  
+
+      if ( ht >= font_size * 2 ) {
+        fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%s:</text>\n",
                 font_size + nd->level * level_to_pt,
                 font_size + nd->pseudo_time_start * s_to_pt,
-                name.c_str());
+		name.c_str());
+        fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%% %.3f</text>\n",
+                font_size + nd->level * level_to_pt,
+                font_size + nd->pseudo_time_start * s_to_pt + 10,
+		percent);
+      }
 
       for ( auto& pair: nd->children ) stack.push_back(&pair.second);
     }
-
+   */
+   
   fprintf(fh,"%s","</g></svg>\n");
   fclose(fh);
 }
