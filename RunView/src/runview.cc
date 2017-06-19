@@ -12,6 +12,7 @@
 #include <string.h>
 #include "ctimers.h"
 #include "util.h"
+#include <time.h>
 
 using namespace std;
 
@@ -245,38 +246,55 @@ RV_Data::atend()
 
 double 
 RV_Data::generate_rect(double x, double y, double w, double scaler, double Psize, RV_Timer_Node* curr, FILE* fh) 
-{
-  double t, h; 
+{ 
+  double h = Psize *( curr->percent_op/100); 
   
-  h = Psize *( curr->percent_op/100); 
+  // Random number for tracking
+  int name = rand()%10000000; 
 
-  // making rectangles and coloring based on runtime
-  if (curr->percent_pp < .5) {
-      fprintf(fh, "<rect fill=\"rgb(150, 150, 220)\" stroke=\"black\" "
-           "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n",x, y, w, h);
-  } else if (curr->percent_pp < 10) {
-      fprintf(fh, "<rect fill=\"rgb(40, 40, 150)\" stroke=\"black\" "
-           "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n",x, y, w, h);
-  } else {
-      fprintf(fh, "<rect fill=\"red\" stroke=\"black\" "
-              "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n",
-              x, y, w, h);
-  }
+  std::ostringstream dNames;
+  dNames << name << "D";             // name of decendant group
+  std::ostringstream tName;
+  tName << name << "TXT";            // text of name
+  std::string pName = curr->name;    // print version of name
+  if (pName.length() > 13) {         // shortens print name if larger than 13 characters
+    pName = pName.substr(0,10);
+  } 
+
+  // Color based on runtime
+  const char* const fill_color=
+    curr->percent_pp < .3? "rgb(179, 225, 255)":
+    curr->percent_pp < 10? "rgb(53,133,223)":"rgb(255,125,37)";
+
+  // Draw Rectangle 
+  fprintf(fh, "<rect class=\"myrect\" id=\"%d\" fill=\"%s\" stroke=\"black\" x=\"%.3f\" y=\"%.3f\""
+	  "width=\"%.3f\" height=\"%.3f\" />\n", name,fill_color, x, y, w, h); 
 
   // printing the text
   if ( h >= 20 ) {
-    fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%s:</text>\n", x+4, y+10, curr->name.c_str());
-        fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%% %.3f</text>\n",
-                x+6, y+20, curr->percent_pp);
+    fprintf(fh, "<text id=\"%s\" class=\"text\" y=\"%.3f\" font-size=\"10\" > \n"
+	    "<tspan class=\"textEl\" x=\"%.3f\"> %s </tspan> \n"
+	    "<tspan class=\"textEl\" x=\"%.3f\" dy=\"10\">%% %.5f </tspan> \n"
+	    "</text> \n", tName.str().c_str(), y+10, x+4, pName.c_str(), x+4, curr->percent_pp);
+  } else {
+    fprintf(fh, "<text id=\"%s\" class=\"text\" y=\"0\" font-size=\"0\" > \n"
+	    "<tspan class=\"textEl\" x=\"0\"> %s </tspan> \n"
+	    "<tspan class=\"textEl\" x=\"0\" dy=\"10\">%% %.5f </tspan> \n"
+	    "</text>\n", tName.str().c_str(), pName.c_str(), curr->percent_pp);
   }
 
+  if (curr->children.size() != 0) {
+    fprintf(fh, "<g id=\"%s\"> \n", dNames.str().c_str()); 
   // drawing rectangles of children
-  for (auto& temp: curr->children) {
-    RV_Timer_Node* const ch = &temp.second;
+  for (auto& elt: curr->children) {
+    RV_Timer_Node* const ch = &elt.second;
     x = ch->level*scaler; 
-    t = generate_rect(x,y,w,scaler,h,ch, fh);
+    double t = generate_rect(x,y,w,scaler,h,ch, fh);
     y += t;
   }
+  fprintf(fh, "</g> \n"); 
+  }
+
 
   return h;
 }
@@ -311,7 +329,7 @@ RV_Data::generate_graph_simple()
   // Declare Cactus parameters. (Needed for out_dir.)
   DECLARE_CCTK_PARAMETERS;
 
-  string svg_file_path = string(out_dir) + "/run-view.svg";
+  string svg_file_path = string(out_dir) + "/run-view.html";
   //
   // Note: out_dir is directory in which to write output for this
   // Cactus run.
@@ -347,39 +365,18 @@ RV_Data::generate_graph_simple()
   const double plot_area_wpt = image_wpt -2 * plot_area_left_xpt;
   const double plot_area_hpt = image_hpt -2 * plot_area_top_ypt;
 
-  // Write SVG Header
-  //
-  fprintf(fh,"%s",
-          "<?xml version=\"1.0\" standalone=\"no\"?>\n"
-          "<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\"\n"
-          "  \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n");
-
-  // Set SVG so that one user unit is one point. This is assuming that
-  // user has adjusted font rendering so that a ten-point font is the
-  // smallest size that's comfortably readable for substantial amounts
-  // of text.
-  //
-  fprintf(fh,"<svg width=\"%.3fpt\" height=\"%.3fpt\"\n"
-          "viewBox=\"0 0 %.3f %.3f\"\n"
-          "version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\">\n",
-          image_wpt, image_hpt, image_wpt, image_hpt);
-
-  fprintf(fh,"%s\n","<desc>Created by RunView</desc>");
-  fprintf(fh,"<g font-size=\"%.3f\" font-family=\"sans-serif\">\n",
-          font_size);
 
   // Convenience functions for emitting SVG rectangles.
-  auto rect = [&](double x, double y, double w, double h)
-    { fprintf(fh, "<rect fill=\"gray\" stroke=\"black\" "
-              "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n",
-              x, y, w, h); };
+   auto rect = [&](double x, double y, double w, double h)
+     { fprintf(fh, "<rect fill=\"gray\" stroke=\"black\" "
+               "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n",
+               x, y, w, h); };
 
   // Emit a box around the entire plot area.
   // rect( plot_area_left_xpt, plot_area_top_ypt, plot_area_wpt-4, plot_area_hpt);
 
   double max_time = 0;
   int max_level = 0;
-
 
   //
   // Determine y-axis position, pseudo_time_start, for each node in
@@ -392,17 +389,13 @@ RV_Data::generate_graph_simple()
   vector<RV_Timer_Node*> stack = { &timer_tree };
   timer_tree.pseudo_time_start = 0;
 
-  // NOT A ROBUST SYSTEM YET. ONLY WORKS IF CHILD OF ROOT IS CALLED MAIN--WHICH MAY NOT ALWAYS BE THE CASE? 
+  // NOT A ROBUST SYSTEM YET. ONLY WORKS IF CHILD OF ROOT IS CALLED MAIN
+  // WHICH MAY NOT ALWAYS BE THE CASE? 
   timer_tree.dur_node_s = timer_tree.dur_kids_s; 
   RV_Timer_Node* main = &timer_tree.children.find("main")->second; 
   double total_time = main->dur_kids_s; 
   main->dur_node_s = main->dur_kids_s; 
  
-  printf("node: %s  ", main->name.c_str());
-  printf("dur: %.3f  ", main->dur_node_s);
-  printf("dur of chil: %.3f  ", main->dur_kids_s); 
-   
-
   while ( stack.size() )
     {
       RV_Timer_Node* const nd = stack.back();  stack.pop_back();
@@ -460,59 +453,124 @@ RV_Data::generate_graph_simple()
   // setting up main for drawRectangles function
    main->percent_op = 100; 
 
-   // drawing root rect
-   fprintf(fh, "<rect fill=\"rgb(150, 150, 220)\" stroke=\"black\" "
-           "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n",plot_area_left_xpt,  plot_area_top_ypt, level_to_pt, plot_area_hpt);
-   fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%s:</text>\n", plot_area_left_xpt+4, plot_area_top_ypt+10, timer_tree.name.c_str());
-   // drawing line to mark end of figure
-   fprintf(fh, "<line x1=\"%.3f\" y1=\"%.3f\" x2=\"%.3f\" y2=\"%.3f\"/>\n", plot_area_wpt, plot_area_top_ypt, plot_area_wpt, plot_area_hpt);
+  // Write to html file 
+  // Write SVG Header
+  fprintf(fh,"%s",
+	  "<html> \n <head> \n"
+	  "<meta http-equiv=\"Conten<h1></h1>t-Type\" content=\"text/html; charset=UTF-8\"> \n"
+	  "<script src=\"http://code.jquery.com/jquery-latest.min.js\"></script>\n"
+	  "</head> \n <body> \n"
+          "<?xml version=\"1.0\" standalone=\"no\"?>\n"
+          "<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\"\n"
+          " \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n"
+	  );
 
-   // drawing rectangles
-   double ta = generate_rect(main->level * level_to_pt, plot_area_top_ypt,level_to_pt,level_to_pt, plot_area_hpt, main, fh); 
+  // Set SVG so that one user unit is one point. This is assuming that
+  // user has adjusted font rendering so that a ten-point font is the
+  // smallest size that's comfortably readable for substantial amounts
+  // of text.
+  //
+  fprintf(fh,"<svg width=\"%.3fpt\" height=\"%.3fpt\"\n"
+          "viewBox=\"0 0 %.3f %.3f\"\n"
+          "version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\">\n",
+          image_wpt, image_hpt, image_wpt, image_hpt);
 
-  // Traverse tree again, this time emit a rectangle for each tree node.
-  // paste code back here...
-  // stack.push_back(&timer_tree);
+  fprintf(fh,"%s\n","<desc>Created by RunView</desc>");
+  fprintf(fh,"<g id=\"all\" font-size=\"%.3f\" font-family=\"sans-serif\">\n",
+          font_size);
 
-   /*
-    while ( stack.size() )
-    {
-   RV_Timer_Node* const nd = stack.back();  stack.pop_back();
+  // draw rectangle around entire space
+    fprintf(fh, "<rect  fill=\"rgb(203, 203, 203)\"  stroke=\"black\" "
+	    "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n", plot_area_left_xpt,  
+	    plot_area_top_ypt, plot_area_wpt -4, plot_area_hpt);
 
-      const double ht = nd->dur_node_s * s_to_pt;
+   // Draw root rectangle
+   fprintf(fh, "<rect id=\"%s\" class=\"myrect\" fill=\"rgb(179, 225, 255)\" stroke=\"black\" "
+	   "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n",timer_tree.name.c_str(),
+	   plot_area_left_xpt,  plot_area_top_ypt, level_to_pt, plot_area_hpt);
 
-      // Declaring temporary variables for respecting limits
-      int x = nd->level * level_to_pt;
-      int y = nd->pseudo_time_start  * s_to_pt;
-      int w = level_to_pt;
-      int h = ht; 
-
-      //  Write svg for rectangle
-      if (nd->percent_pp < 10) {
-	rect(x,y,w,h);
-      } else {
-	red_rect(x,y,w,h); 
-      }
-      string name = escapeForXML( nd->name.substr(0,width_char) );  
-      double percent =  nd->percent_op;  
-
-      if ( ht >= font_size * 2 ) {
-        fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%s:</text>\n",
-                font_size + nd->level * level_to_pt,
-                font_size + nd->pseudo_time_start * s_to_pt,
-		name.c_str());
-        fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%% %.3f</text>\n",
-                font_size + nd->level * level_to_pt,
-                font_size + nd->pseudo_time_start * s_to_pt + 10,
-		percent);
-      }
-
-      for ( auto& pair: nd->children ) stack.push_back(&pair.second);
-    }
-   */
+    fprintf(fh, "<text id=\"rootTXT\" class=\"text\" y=\"%.3f\" font-size=\"10\" > \n"
+	    "<tspan class=\"textEl\" x=\"%.3f\"> %s </tspan> \n"
+	    "<tspan class= \"textEl\" x=\"%.3f\" dy=\"10\">%% %.5f </tspan> \n"
+	    "</text> \n",  plot_area_top_ypt+10, plot_area_left_xpt+4, timer_tree.name.c_str(), 
+	    plot_area_left_xpt+4, timer_tree.percent_pp);
    
-  fprintf(fh,"%s","</g></svg>\n");
-  fclose(fh);
+   fprintf(fh, "<g id=\"rootD\" > \n");
+
+   // Draw rectangles
+   srand(time(NULL)); 
+   double ta = generate_rect(main->level * level_to_pt, plot_area_top_ypt, 
+			     level_to_pt,level_to_pt, plot_area_hpt, main, fh); 
+   fprintf(fh, "%s", "</g> \n"); 
+   fprintf(fh, "%s", "</svg> \n"); 
+   
+
+   // Add javascript features 
+   fprintf(fh, "%s", 
+	   "<script type=\"text/javascript\"> \n"
+	   "$('#all').find('.myrect').mouseenter( function () colorChange(this) ); \n"
+	   "$('#all').find('.myrect').click( function () expand(this) ); \n"
+	   "function colorChange(rect) { \n"
+	   "var color = rect.getAttribute(\"fill\"); \n"
+	   "$(rect).attr(\"fill\", \"rgb(255,101,142)\"); \n "
+	   "$(rect).mouseleave(function () { $(rect).attr(\"fill\", color);}) \n } \n"
+	   "function expand(rect) {\n"
+	   "var findMain = document.getElementById(\"all\").getElementsByClassName(\"myrect\"); \n "
+	   "var svgHeight = Number(findMain.item(0).getAttribute(\"height\")); \n"
+	   "var width = Number(rect.getAttribute(\"width\")); \n"
+	   "var height = Number(rect.getAttribute(\"height\")); \n"
+	   "var scale = svgHeight/height; \n"
+	   "var name = rect.getAttribute(\"id\");\n"
+	   "var d = \"D\";\n"
+	   "var decendants = name.concat(d);\n"
+	   "$(\"#all\").find(\".myrect\").hide(); \n"
+	   "$(\"#all\").find(\".text\").hide(); \n"
+	   "var coeff = Number(rect.getAttribute(\"x\"))/width; \n"
+	   "var y = 5; \n var parentY=Number(rect.getAttribute(\"y\")); \n parentH = Number(rect.getAttribute(\"height\")); \n"
+	   "if (document.getElementById(decendants) !== null) { \n"
+	   "var decs = document.getElementById(decendants).getElementsByClassName(\"myrect\"); \n"
+	   " for (var i = 0; i < decs.length; i++) { \n"
+	   "var curr = decs.item(i); \n"
+	   "var newHeight = Number(curr.getAttribute(\"height\"))*scale; \n"
+	   "var x = Number(curr.getAttribute(\"x\")) - coeff * width+5; \n"
+	   "var currY = Number(curr.getAttribute(\"y\")); \n"
+	   "y=(((currY - parentY) * svgHeight)/parentH) + 5; \n"
+	   "curr.setAttribute(\"x\", x);\n "
+	   "curr.setAttribute(\"y\", y); \n"
+	   "curr.setAttribute(\"height\", newHeight); \n"
+	   "var rN = curr.getAttribute(\"id\"); \n"
+	   "var t = \"TXT\"; \n"
+	   "var text = rN.concat(t); \n"
+	   "if (newHeight > 21) { \n"
+	   "var textEl = document.getElementById(text); \n"
+	   "textEl.setAttribute(\"y\", y+10); \n"
+	   "textEl.setAttribute(\"font-size\", \"10\"); \n"
+	   "var textEls = document.getElementById(text).getElementsByClassName(\"textEl\"); \n"
+	   "textEls.item(0).setAttribute(\"x\", x+5); \n"
+	   "textEls.item(1).setAttribute(\"x\", x+5); \n"
+	   "} \n"
+	   "\n } \n } \n"
+	   "rect.setAttribute(\"x\", \"5\"); \n rect.setAttribute(\"y\", \"5\"); \n rect.setAttribute(\"height\", svgHeight); \n"
+	   "var rN = rect.getAttribute(\"id\"); \n"
+	   "var t = \"TXT\"; \n"
+	   "var text = rN.concat(t); \n"
+	   "var textEl = document.getElementById(text); \n"
+	   "textEl.setAttribute(\"y\", \"15\"); \n"
+	   "textEl.setAttribute(\"font-size\", \"10\"); \n"
+	   "var textEls = document.getElementById(text).getElementsByClassName(\"textEl\"); \n"
+	   "textEls.item(0).setAttribute(\"x\", \"10\"); \n"
+	   "textEls.item(1).setAttribute(\"x\", \"10\"); \n"
+	   "$(document.getElementById(name)).show(); \n"
+	   " $(document.getElementById(decendants)).find(\".myrect\").show(); \n"
+	   "$(document.getElementById(text)).show(); \n"
+	   " $(document.getElementById(decendants)).find(\".text\").show(); \n"
+	   "}"
+	   "</script> \n");
+
+   // Close
+   fprintf(fh, "%s", "</body> \n </head> \n");
+ 
+   fclose(fh);
 }
 
 void
