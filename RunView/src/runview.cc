@@ -24,12 +24,14 @@ public:
     dur_node_set = true;
     name = node_name;
     level = 0;
+    id = rand()%10000000;
   }
   RV_Timer_Node()
   {
     dur_kids_s = 0;
     dur_node_set = false;
     level = -1;
+    id = rand()%10000000;
   }
   void insert(Strings& path, int levelp, double time)
     {
@@ -96,6 +98,7 @@ public:
   // main/Evolve/PrintTimers there would be three nodes, named main,
   // Evolve, and PrintTimers, at levels 1, 2, and 3, respectively.
   string name;
+  int id; 
   int level;
 
   bool dur_node_set;  // If true, dur_node_s set to some value.
@@ -173,6 +176,8 @@ RV_Data::atend()
 
   // Organize timer data into a tree, timer_tree.
   //
+  srand(time(NULL)); 
+
   for ( int i=0; i<ntimers; i++ )
     {
       const char *name = CCTK_TimerName(i);
@@ -534,7 +539,7 @@ RV_Data::generate_graph_simple()
 	   "var newHeight = Number(curr.getAttribute(\"height\"))*scale; \n"
 	   "var x = Number(curr.getAttribute(\"x\")) - coeff * width+5; \n"
 	   "var currY = Number(curr.getAttribute(\"y\")); \n"
-	   "y=(((currY - parentY) * svgHeight)/parentH) + 5; \n"
+	   "y=(((currY - parentY) * svgHeight)/parentH +5); \n"
 	   "curr.setAttribute(\"x\", x);\n "
 	   "curr.setAttribute(\"y\", y); \n"
 	   "curr.setAttribute(\"height\", newHeight); \n"
@@ -578,7 +583,7 @@ RV_Data::generate_timeline_simple()
 {
   DECLARE_CCTK_PARAMETERS;
 
-  string svg_file_path = string(out_dir) + "/run-view-timeline.svg";
+  string svg_file_path = string(out_dir) + "/run-view-timeline.html";
   FILE* const fh = fopen(svg_file_path.c_str(), "w");
   if ( !fh )
     {
@@ -699,6 +704,15 @@ RV_Data::generate_timeline_simple()
   const double image_wpt = plot_area_wpt;
   const double image_hpt = plot_area_hpt;
 
+  fprintf(fh, "%s",
+	  "<html> \n <body> \n"); 
+
+  fprintf(fh, "%s",
+	  "<head> \n"
+	  "<meta http-equiv=\"Conten<h1></h1>t-Type\" content=\"text/html; charset=UTF-8\"> \n"
+	  "<script src=\"http://code.jquery.com/jquery-latest.min.js\"></script> \n"
+	  "</head> \n");
+
   fprintf(fh,"%s",
           "<?xml version=\"1.0\" standalone=\"no\"?>\n"
           "<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\"\n"
@@ -729,26 +743,54 @@ RV_Data::generate_timeline_simple()
 
   // Generate SVG for individual segments.
   //
+  map<string, int> classNames; 
+  srand(time(NULL)); 
+
   for ( auto& s: seg_info )
     {
       const double xpt = s.start_s * s_to_pt;
       const double ypt = s.level * level_to_pt;
       const double wpt = ( s.end_s - s.start_s ) * s_to_pt;
 
-      fprintf(fh, "<rect fill=\"white\" stroke=\"black\" "
-              "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n",
-              xpt, ypt, wpt, seg_hpt);
+      //const string name = leaf_name[s.timer_idx]; 
+       //printf("\n  %s  ", name.c_str()); 
+       //printf("  %d  \n", s.timer_idx);
+
+      int clsName; 
+      std::ostringstream key;
+      key << s.timer_idx; 
+
+  
+      if (classNames.find(key.str()) != classNames.end()) {
+	clsName = classNames.find(key.str())->second; 
+      } else {
+	clsName = rand()%1000000; 
+	classNames.insert(std::pair<string,int>(key.str(),clsName));
+      } 
+
+      fprintf(fh, "<rect class=\"%d\" id=\"%s \" fill=\"white\" stroke=\"black\" "
+              "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n", 
+	      clsName, leaf_name[s.timer_idx].c_str(), xpt, ypt, wpt, seg_hpt);
 
       // Estimate width assuming that character width is font_size/1.2.
       const int width_char = 1.2 * wpt / font_size;
+      const string name = escapeForXML( leaf_name[s.timer_idx].substr(0,width_char) );
 
       if ( width_char < 2 ) continue;
-
-      string name = escapeForXML( leaf_name[s.timer_idx].substr(0,width_char) );
       fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%s</text>\n",
               xpt + 0.5*font_size, ypt + font_size, name.c_str() );
     }
 
   fprintf(fh,"%s","</g></svg>\n");
+
+  fprintf(fh, "%s", 
+	  "<script type=\"text/javascript\"> \n"
+	  "$('rect').mouseenter(function () highlight(this)); \n"
+	  "function highlight(rect) { \n"
+	  "var clsName = rect.getAttribute('class'); \n"
+	  "$('.'+clsName).attr(\"fill\", \"rgb(255,145, 48)\"); \n"
+	  "$('.'+clsName).mouseleave( function() {$('.'+clsName).attr(\"fill\", \"white\"); }); } \n"
+	  "</script> \n");
+  fprintf(fh, "%s","</body> \n </html>"); 
   fclose(fh);
 }
