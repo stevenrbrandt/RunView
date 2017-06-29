@@ -13,8 +13,27 @@
 #include "ctimers.h"
 #include "util.h"
 #include <time.h>
+#include <fstream>
+#include <PatternFinder.h>
+#include <limits.h>
+#include <unistd.h>
 
 using namespace std;
+
+std::string getfilepath(string fN) 
+  {
+     char result[ PATH_MAX ];
+     ssize_t count = readlink( "/proc/self/exe", result, PATH_MAX ); 
+     string exePath = std::string(result, (count > 0) ? count : 0);
+
+     // redirect to directory holding javascript file
+     std::size_t found = exePath.find("exe"); 
+     string fileName = exePath.substr(0,found) + 
+     "arrangements/RunView/RunView/src/" + fN;
+
+     return fileName; 
+  }
+
 
 class RV_Timer_Node {
 public:
@@ -510,70 +529,23 @@ RV_Data::generate_graph_simple()
    fprintf(fh, "%s", "</svg> \n"); 
    
 
-   // Add javascript features 
-   fprintf(fh, "%s", 
-	   "<script type=\"text/javascript\"> \n"
-	   "$('#all').find('.myrect').mouseenter( function () colorChange(this) ); \n"
-	   "$('#all').find('.myrect').click( function () expand(this) ); \n"
-	   "function colorChange(rect) { \n"
-	   "var color = rect.getAttribute(\"fill\"); \n"
-	   "$(rect).attr(\"fill\", \"rgb(255,101,142)\"); \n "
-	   "$(rect).mouseleave(function () { $(rect).attr(\"fill\", color);}) \n } \n"
-	   "function expand(rect) {\n"
-	   "var findMain = document.getElementById(\"all\").getElementsByClassName(\"myrect\"); \n "
-	   "var svgHeight = Number(findMain.item(0).getAttribute(\"height\")); \n"
-	   "var width = Number(rect.getAttribute(\"width\")); \n"
-	   "var height = Number(rect.getAttribute(\"height\")); \n"
-	   "var scale = svgHeight/height; \n"
-	   "var name = rect.getAttribute(\"id\");\n"
-	   "var d = \"D\";\n"
-	   "var decendants = name.concat(d);\n"
-	   "$(\"#all\").find(\".myrect\").hide(); \n"
-	   "$(\"#all\").find(\".text\").hide(); \n"
-	   "var coeff = Number(rect.getAttribute(\"x\"))/width; \n"
-	   "var y = 5; \n var parentY=Number(rect.getAttribute(\"y\")); \n parentH = Number(rect.getAttribute(\"height\")); \n"
-	   "if (document.getElementById(decendants) !== null) { \n"
-	   "var decs = document.getElementById(decendants).getElementsByClassName(\"myrect\"); \n"
-	   " for (var i = 0; i < decs.length; i++) { \n"
-	   "var curr = decs.item(i); \n"
-	   "var newHeight = Number(curr.getAttribute(\"height\"))*scale; \n"
-	   "var x = Number(curr.getAttribute(\"x\")) - coeff * width+5; \n"
-	   "var currY = Number(curr.getAttribute(\"y\")); \n"
-	   "y=(((currY - parentY) * svgHeight)/parentH +5); \n"
-	   "curr.setAttribute(\"x\", x);\n "
-	   "curr.setAttribute(\"y\", y); \n"
-	   "curr.setAttribute(\"height\", newHeight); \n"
-	   "var rN = curr.getAttribute(\"id\"); \n"
-	   "var t = \"TXT\"; \n"
-	   "var text = rN.concat(t); \n"
-	   "if (newHeight > 21) { \n"
-	   "var textEl = document.getElementById(text); \n"
-	   "textEl.setAttribute(\"y\", y+10); \n"
-	   "textEl.setAttribute(\"font-size\", \"10\"); \n"
-	   "var textEls = document.getElementById(text).getElementsByClassName(\"textEl\"); \n"
-	   "textEls.item(0).setAttribute(\"x\", x+5); \n"
-	   "textEls.item(1).setAttribute(\"x\", x+5); \n"
-	   "} \n"
-	   "\n } \n } \n"
-	   "rect.setAttribute(\"x\", \"5\"); \n rect.setAttribute(\"y\", \"5\"); \n rect.setAttribute(\"height\", svgHeight); \n"
-	   "var rN = rect.getAttribute(\"id\"); \n"
-	   "var t = \"TXT\"; \n"
-	   "var text = rN.concat(t); \n"
-	   "var textEl = document.getElementById(text); \n"
-	   "textEl.setAttribute(\"y\", \"15\"); \n"
-	   "textEl.setAttribute(\"font-size\", \"10\"); \n"
-	   "var textEls = document.getElementById(text).getElementsByClassName(\"textEl\"); \n"
-	   "textEls.item(0).setAttribute(\"x\", \"10\"); \n"
-	   "textEls.item(1).setAttribute(\"x\", \"10\"); \n"
-	   "$(document.getElementById(name)).show(); \n"
-	   " $(document.getElementById(decendants)).find(\".myrect\").show(); \n"
-	   "$(document.getElementById(text)).show(); \n"
-	   " $(document.getElementById(decendants)).find(\".text\").show(); \n"
-	   "}"
-	   "</script> \n");
+   // Add javascript features from file
+   string fN = "simpleGraphScript.txt";
+   string fileName = getfilepath(fN); 
+   
+   // Open and read from file
+   string line; 
+   std::ifstream scriptFile;
+   scriptFile.open(fileName.c_str(), std::ifstream::in); 
+   if (scriptFile.is_open()) {
+     while (!scriptFile.eof()) {
+       getline(scriptFile, line); 
+       fprintf(fh, "%s \n", line.c_str()); 
+     }
+   }
 
    // Close
-   fprintf(fh, "%s", "</body> \n </head> \n");
+   fprintf(fh, "%s", "</body> \n </head>\n </html>\n");
  
    fclose(fh);
 }
@@ -670,8 +642,20 @@ RV_Data::generate_timeline_simple()
       }
     }
 
-
-  //
+  // Finding patterns 
+  /*
+  std::ostringstream seg_indices; 
+  seg_indices << ";;";
+  int counter = 0; 
+  for (auto& s:seg_info) {
+    seg_indices << s.timer_idx << ";;"; 
+    counter++; 
+  }
+ 
+  PatternFinder* pt = new PatternFinder(seg_indices.str());
+  pt->findPatterns(); 
+  */
+ 
   /// Write SVG Image of Segments
   //
 
@@ -680,16 +664,20 @@ RV_Data::generate_timeline_simple()
 
   // Plot Area (area holding segments) Width
   //
-  const double plot_area_wpt = 1000;
+  const double plot_area_wpt = 800;
 
   // Compute scale factors.
   //
   // Seconds to Points
   const double s_to_pt = plot_area_wpt / seg_info.back().end_s;
+
+  // Total time
+  double duration = seg_info.back().end_s; 
+
   //
   // Level to Point
   const double level_ht_lines = 2;
-  const double level_to_pt = level_ht_lines * baselineskip_pt;
+  const double level_to_pt = level_ht_lines * baselineskip_pt * 1.7;
 
   // Height of a Segment.
   const double seg_hpt = level_to_pt;
@@ -718,6 +706,31 @@ RV_Data::generate_timeline_simple()
           "<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\"\n"
           "  \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n");
 
+  // InfoBox information 
+  fprintf(fh,"<svg width=\"%.3fpt\" height=\"100pt\"\n"
+          "viewBox=\"0 0 %.3f 100\"\n"
+	  "preserveAspectRatio = \"xMinYMin meet\" "
+          "version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\">\n",
+          image_wpt, image_wpt);
+  
+  string name = "DK"; 
+  string happy ="aight";
+  string honor = "%100"; 
+  string zuko = "yes";
+
+  fprintf(fh, "<g font-size=\"10.000\" font-family=\"sans-serif\" stroke-width=\"0.2\"> \n"
+	  " <rect id=\"infoBoxBackground\" fill=\"rgb(179, 225, 255)\" "
+	  "stroke=\"none\" x=\"0\" y=\"0\" width=\"%.3fpt\" height=\"100pt\" /> \n"
+	  "<text id=\"infoText\" class=\"text\" y=\"15.000\" font-size=\"10\"> \n"
+	  "<tspan class=\"textEl\" x=\"9.000\" font-size=\"15\" >Summary of Execution:  </tspan> \n "
+	  "<tspan class= \"textEl\" x=\"9.000\" dy=\"15\">Author: %s </tspan> \n"
+	  "<tspan class= \"textEl\" x=\"9.000\" dy=\"10\">Duration: %.4f</tspan> \n "
+	  "<tspan class= \"textEl\" x=\"9.000\" dy=\"10\">Happiness Levels: %s </tspan> \n"
+	  "<tspan class= \"textEl\" x=\"9.000\" dy=\"10\">Honor: %s </tspan>"
+	  "<tspan class= \"textEl\" x=\"9.000\" dy=\"10\">Is this Zuko: %s </tspan> \n"
+	  "</text> \n </g> \n </svg> \n", image_wpt, name.c_str(), duration, happy.c_str(), honor.c_str(), zuko.c_str() );
+
+
   // Set SVG so that one user unit is one point. This is assuming that
   // user has adjusted font rendering so that a ten-point font is the
   // smallest size that's comfortably readable for substantial amounts
@@ -725,6 +738,7 @@ RV_Data::generate_timeline_simple()
   //
   fprintf(fh,"<svg width=\"%.3fpt\" height=\"%.3fpt\"\n"
           "viewBox=\"0 0 %.3f %.3f\"\n"
+	  "preserveAspectRatio = \"xMinYMin meet\" "
           "version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\">\n",
           image_wpt, image_hpt, image_wpt, image_hpt);
 
@@ -734,15 +748,28 @@ RV_Data::generate_timeline_simple()
   //
   fprintf
     (fh,
-     "<rect x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" "
+     "<rect id= \"background\" x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" "
      "fill=\"#bbb\" stroke=\"none\"/>\n",
      0.0, 0.0, plot_area_wpt, plot_area_hpt);
 
   fprintf(fh,"<g font-size=\"%.3f\" font-family=\"sans-serif\" "
           "stroke-width=\"0.2\">\n", font_size);
 
+  // Make main rectangle
+  fprintf
+    (fh,
+     "<rect class= \"main\" x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" "
+     "fill=\"white\" stroke=\"black\"/>\n",
+     0.0, 0.0, plot_area_wpt, seg_hpt);
+
+  fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">Main</text>\n",
+              0 + 0.5*font_size, 0 + font_size );
+
+
+
   // Generate SVG for individual segments.
-  //
+  // Also tracking for pattern recognition
+  vector<int> events; 
   map<string, int> classNames; 
   srand(time(NULL)); 
 
@@ -752,13 +779,10 @@ RV_Data::generate_timeline_simple()
       const double ypt = s.level * level_to_pt;
       const double wpt = ( s.end_s - s.start_s ) * s_to_pt;
 
-      //const string name = leaf_name[s.timer_idx]; 
-       //printf("\n  %s  ", name.c_str()); 
-       //printf("  %d  \n", s.timer_idx);
-
       int clsName; 
       std::ostringstream key;
       key << s.timer_idx; 
+      events.push_back(s.timer_idx); 
 
   
       if (classNames.find(key.str()) != classNames.end()) {
@@ -783,14 +807,22 @@ RV_Data::generate_timeline_simple()
 
   fprintf(fh,"%s","</g></svg>\n");
 
-  fprintf(fh, "%s", 
-	  "<script type=\"text/javascript\"> \n"
-	  "$('rect').mouseenter(function () highlight(this)); \n"
-	  "function highlight(rect) { \n"
-	  "var clsName = rect.getAttribute('class'); \n"
-	  "$('.'+clsName).attr(\"fill\", \"rgb(255,145, 48)\"); \n"
-	  "$('.'+clsName).mouseleave( function() {$('.'+clsName).attr(\"fill\", \"white\"); }); } \n"
-	  "</script> \n");
+
+   // Add javascript features from file
+  string fN = "timelineSimpleScript.txt";
+  string fileName = getfilepath(fN); 
+
+  string line; 
+  std::ifstream scriptFile;
+  scriptFile.open(fileName.c_str(), std::ifstream::in); 
+  if (scriptFile.is_open()) {
+    while (!scriptFile.eof()) {
+      getline(scriptFile, line); 
+      fprintf(fh, "%s \n", line.c_str()); 
+    }
+  }
+
   fprintf(fh, "%s","</body> \n </html>"); 
   fclose(fh);
+
 }
