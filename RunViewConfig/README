@@ -1,0 +1,11 @@
+Cactus Code Thorn RunViewConfig
+Author(s)    : The Chemora Group
+Maintainer(s): The Chemora Group
+Licence      : 
+--------------------------------------------------------------------------
+
+1. Purpose
+
+Provides build information to the RunView thorn. As of this writing,
+that build information includes a definition that indicates the
+presense of the PAPI library.

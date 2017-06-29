@@ -12,11 +12,7 @@
 #include <string.h>
 #include "ctimers.h"
 #include "util.h"
-#include <time.h>
-#include <fstream>
-#include <PatternFinder.h>
-#include <limits.h>
-#include <unistd.h>
+#include "rv_papi.h"
 
 using namespace std;
 
@@ -52,7 +48,7 @@ public:
     level = -1;
     id = rand()%10000000;
   }
-  void insert(Strings& path, int levelp, double time)
+  void insert(Strings& path, int levelp, double time, const RV_PAPI_Sample &ps)
     {
       // Add node at LEVELP for timer described by PATH with duration
       // TIME.
@@ -93,23 +89,31 @@ public:
           assert( !dur_node_set );
           dur_node_set = true;
           dur_node_s = time;
+          papi_node = ps;
           return;
         }
 
       // Check if this is the parent of the leaf node of the timer.
       // If so, collect time of children.
       //
-      if ( path.size() == level + 1 ) dur_kids_s += time;
+      if ( path.size() == level + 1 )
+        {
+          dur_kids_s += time;
+          papi_kids += ps;
+        }
 
       // Insert a node for next component.
       //
-      children[path[level]].insert(path,level+1,time);
+      children[path[level]].insert(path,level+1,time,ps);
     }
 
   double dur_node_s;  // Duration recorded by Cactus timer.
   double dur_kids_s;  // Sum of durations of immediate children.
   double percent_op;  // Percent of parent, set by immediate parent
   double percent_pp;  // percent of the program runtime that is dedicated to this node 
+
+  RV_PAPI_Sample papi_node;
+  RV_PAPI_Sample papi_kids;
 
   double pseudo_time_start;  // Start time, set for a particular image.
 
@@ -127,6 +131,7 @@ public:
 class RV_Data {
 public:
   RV_Data():timer_tree("root"){};
+  void init();
   int atend();
   double generate_rect(double x, double y, double w, double scaler, double Psize, RV_Timer_Node* curr, FILE* fh);
   void generate_text_tree();
@@ -143,16 +148,9 @@ RV_CTimers rv_ctimers;
 CCTK_INT
 RunView_init()
 {
-  DECLARE_CCTK_PARAMETERS;
-
-  // A message providing reassurance to a beginner becoming familiar with
-  // the code. Delete the message when no longer necessary.
-  //
-  printf("Hello from init.\n");
-
   // Initialize the collection of timer event data
   //
-  rv_ctimers.init();
+  rv_data.init();
 
   return 0;
 }
@@ -166,7 +164,20 @@ RunView_atend()
   return rv_data.atend();
 }
 
+void
+RV_Data::init()
+{
+  // Initialize the collection of timer event data
+  //
+  rv_ctimers.init();
 
+  // Initialize collection of CPU performance counter data.
+  //
+#ifdef HAVE_PAPI
+  rv_ctimers.papi_init
+    ( { PAPI_TOT_INS, PAPI_L3_TCM, PAPI_PRF_DM, PAPI_TLB_DM } );
+#endif
+}
 
 int
 RV_Data::atend()
@@ -224,8 +235,10 @@ RV_Data::atend()
           // Compare duration of the RunView clock with the clock used
           // above.
           const double delta = fabs(timer_secs - t.duration_s) * 1e6;
-          printf("%10.6f %3.0f µs %s %3d %s\n",
-                 timer_secs, delta, tv->heading, t.missequence_count, name);
+          printf("%10.6f %3.0f µs %s %3d %10lld %s\n",
+                 timer_secs, delta, tv->heading, t.missequence_count,
+                 t.papi_sample[PAPI_TOT_INS],
+                 name);
         }
 
       //
@@ -254,7 +267,7 @@ RV_Data::atend()
       //
       Strings pieces = split(name,'/');
       if ( pieces[0] != "main" ) continue;
-      timer_tree.insert(pieces,0,t.duration_s);
+      timer_tree.insert(pieces,0,t.duration_s,t.papi_sample);
     }
 
   CCTK_TimerDestroyData(td);
@@ -337,8 +350,8 @@ RV_Data::generate_text_tree()
       RV_Timer_Node* const nd = stack.back();  stack.pop_back();
 
       printf
-        ("%10.6f %10.6f %s %s\n",
-         nd->dur_node_s, nd->dur_kids_s,
+        ("%10.6f %10.6f %10lld %s %s\n",
+         nd->dur_node_s, nd->dur_kids_s, nd->papi_node[PAPI_TOT_INS],
          string(nd->level*2,' ').c_str(), nd->name.c_str());
 
       for ( auto& ch: nd->children ) stack.push_back(&ch.second);
@@ -477,31 +490,40 @@ RV_Data::generate_graph_simple()
   // setting up main for drawRectangles function
    main->percent_op = 100; 
 
-  // Write to html file 
-  // Write SVG Header
-  fprintf(fh,"%s",
-	  "<html> \n <head> \n"
-	  "<meta http-equiv=\"Conten<h1></h1>t-Type\" content=\"text/html; charset=UTF-8\"> \n"
-	  "<script src=\"http://code.jquery.com/jquery-latest.min.js\"></script>\n"
-	  "</head> \n <body> \n"
-          "<?xml version=\"1.0\" standalone=\"no\"?>\n"
-          "<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\"\n"
-          " \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n"
-	  );
+      const double ht = nd->dur_node_s * s_to_pt;
+      const double top_ypt = nd->pseudo_time_start * s_to_pt;
 
-  // Set SVG so that one user unit is one point. This is assuming that
-  // user has adjusted font rendering so that a ten-point font is the
-  // smallest size that's comfortably readable for substantial amounts
-  // of text.
-  //
-  fprintf(fh,"<svg width=\"%.3fpt\" height=\"%.3fpt\"\n"
-          "viewBox=\"0 0 %.3f %.3f\"\n"
-          "version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\">\n",
-          image_wpt, image_hpt, image_wpt, image_hpt);
+      rect( nd->level * level_to_pt, top_ypt, level_to_pt, ht );
+      string name = escapeForXML( nd->name.substr(0,width_char) );
 
-  fprintf(fh,"%s\n","<desc>Created by RunView</desc>");
-  fprintf(fh,"<g id=\"all\" font-size=\"%.3f\" font-family=\"sans-serif\">\n",
-          font_size);
+      const double baselineskip_ypt = font_size * 1.2;
+      const double text_limit_ypt = top_ypt + ht - baselineskip_ypt;
+      const double text_xpt = font_size + nd->level * level_to_pt;
+      double curr_text_ypt = nd->pseudo_time_start * s_to_pt;
+
+      if ( curr_text_ypt < text_limit_ypt )
+        fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%s</text>\n",
+                text_xpt, curr_text_ypt += baselineskip_ypt,
+                name.c_str());
+
+      if ( nd->papi_node.filled() )
+        {
+          const papi_long n_insn =
+            max(papi_long(1),nd->papi_node[PAPI_TOT_INS]);
+          const papi_long n_cyc = max(papi_long(1),nd->papi_node.cyc);
+          const double mpki = 1000.0 * nd->papi_node[PAPI_L3_TCM] / n_insn;
+          if ( curr_text_ypt < text_limit_ypt )
+            fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">L3 %.3f MPKI</text>\n",
+                    text_xpt, curr_text_ypt += baselineskip_ypt,
+                    mpki );
+          if ( curr_text_ypt < text_limit_ypt )
+            fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%.1f IPC</text>\n",
+                    text_xpt, curr_text_ypt += baselineskip_ypt,
+                    double(n_insn) / n_cyc );
+        }
+
+      for ( auto& pair: nd->children ) stack.push_back(&pair.second);
+    }
 
   // draw rectangle around entire space
     fprintf(fh, "<rect  fill=\"rgb(203, 203, 203)\"  stroke=\"black\" "

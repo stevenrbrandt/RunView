@@ -4,3 +4,4 @@ PROVIDES RunView
 {
 }
 
+REQUIRES RunViewConfig

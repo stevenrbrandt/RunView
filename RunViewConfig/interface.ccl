@@ -1,0 +1,4 @@
+# Interface definition for thorn RunViewConfig
+implements: RunViewConfig
+inherits:
+

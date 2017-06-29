@@ -1,7 +1,9 @@
 #include <cctk.h>
+#include "rv_papi.h"
 #include "ctimers.h"
 #include "util.h"
 
+using namespace std;
 
 RV_Timer_Event::RV_Timer_Event(int idx, RV_Event_Type et):
     event_time_s( time_wall_fp() - rv_ctimers.epoch_s ),
@@ -35,7 +37,7 @@ RV_CTimers::init()
     };
 
 #define MAKE_FUNC(et)                                                   \
-  [](int idx, void *data){ rv_ctimers.events.emplace_back(idx,et); }
+  [](int idx, void *data){ rv_ctimers.handle_timer_event(idx,et); }
   funcs.start = MAKE_FUNC(RET_Timer_Start);
   funcs.stop = MAKE_FUNC(RET_Timer_Stop);
   funcs.reset = MAKE_FUNC(RET_Timer_Reset);
@@ -51,11 +53,43 @@ RV_CTimers::init()
   CCTK_ClockRegister(clock_name, &funcs);
 }
 
+void
+RV_CTimers::papi_init(vector<int> papi_events)
+{
+  assert( !pm );
+  pm = &rv_papi_manager;
+  pm->setup(papi_events);
+}
+
 RV_CTimer&
 RV_CTimers::get(int cactus_timer_index)
 {
   timers_update();
   return timers[cactus_timer_index];
+}
+
+void
+RV_CTimers::handle_timer_event(int timer_index, RV_Event_Type et)
+{
+  events.emplace_back(timer_index,et);
+  if ( !pm ) return;
+  if ( timer_index >= timers.size() ) timers.resize(timer_index+1);
+  RV_CTimer& t = timers[timer_index];
+
+  switch ( et ) {
+  case RET_Timer_Start:
+    if ( t.papi_event_last == RET_Timer_Start ) t.missequence_count++;
+    else t.papi_sample_at_start = pm->sample_get();
+    break;
+  case RET_Timer_Stop:
+    if ( t.papi_event_last != RET_Timer_Start ) t.missequence_count++;
+    else t.papi_sample.accumulate(pm->sample_get(),t.papi_sample_at_start);
+    break;
+  case RET_Timer_Reset:
+    t.papi_sample.reset();
+    break;
+  default: assert( false ); }
+  t.papi_event_last = et;
 }
 
 void
