@@ -57,22 +57,7 @@ RV_PAPI_Manager::setup(vector<int> eventsp)
     samples.reserve((1+n_events)*100);
 
   PE( PAPI_start( eset ) );
-  cyc_start = PAPI_get_real_cyc();
 
-# endif
-}
-
-double
-RV_PAPI_Manager::cpu_clock_max_hz_get()
-{
-# ifdef HAVE_PAPI
-  const PAPI_hw_info_t* const hw_info = PAPI_get_hardware_info();
-  if ( !hw_info ) return 0;
-  return hw_info->cpu_max_mhz * 1e6;
-# else
-  // Actually, there are many ways to get the clock without papi,
-  // but ATM this function is only called when PAPI is available.
-  return 0;
 # endif
 }
 

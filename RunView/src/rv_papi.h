@@ -51,11 +51,7 @@ public:
       cyc += s.cyc;
       for ( int i=0; i<values.size(); i++ ) values[i] += s.values[i];
     }
-  void accumulate
-  (const RV_PAPI_Sample* at_end, const RV_PAPI_Sample* at_start)
-    { accumulate(*at_end,*at_start); }
-  void accumulate
-  (const RV_PAPI_Sample& at_end, const RV_PAPI_Sample& at_start)
+  void accumulate(RV_PAPI_Sample&& at_end, RV_PAPI_Sample& at_start)
     {
       if ( values.empty() ) values.resize( at_end.values.size() );
       cyc += at_end.cyc - at_start.cyc;
@@ -77,6 +73,7 @@ class RV_PAPI_Manager {
 public:
 
   RV_PAPI_Manager(){ eset = PAPI_NULL; ncounters = -1; }
+  ~RV_PAPI_Manager() { destroy(); }
 
   int ncounters;
   int eset;
@@ -95,12 +92,10 @@ public:
 
   RV_PAPI_Sample sample_get()
   {
-    RV_PAPI_Sample rv(PAPI_get_real_cyc()-cyc_start,n_events);
+    RV_PAPI_Sample rv(PAPI_get_real_cyc(),n_events);
     PE( PAPI_read(eset, rv.values_ptr()) );
     return rv;
   }
-
-  double cpu_clock_max_hz_get();
 
   int ncallbacks;
   void callback(int eset, void *pc);
@@ -113,8 +108,9 @@ extern RV_PAPI_Manager rv_papi_manager;
 inline papi_long
 RV_PAPI_Sample::operator [](int papi_event) const
 {
-  if ( !available(papi_event) ) return 0;
+  if ( values.empty() ) return 0;
   auto idxi = rv_papi_manager.event_to_idx.find(papi_event);
+  assert( idxi != rv_papi_manager.event_to_idx.end() );
   return values[idxi->second];
 }
 
