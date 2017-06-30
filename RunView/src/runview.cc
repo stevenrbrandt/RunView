@@ -175,7 +175,8 @@ RV_Data::init()
   //
 #ifdef HAVE_PAPI
   rv_ctimers.papi_init
-    ( { PAPI_TOT_INS, PAPI_L3_TCM, PAPI_PRF_DM, PAPI_TLB_DM } );
+    ( { PAPI_TOT_INS, PAPI_L3_TCM, PAPI_BR_MSP, PAPI_RES_STL,
+        PAPI_STL_CCY, PAPI_FUL_CCY, PAPI_TLB_DM } );
 #endif
 }
 
@@ -512,6 +513,11 @@ RV_Data::generate_graph_simple()
             max(papi_long(1),nd->papi_node[PAPI_TOT_INS]);
           const papi_long n_cyc = max(papi_long(1),nd->papi_node.cyc);
           const double mpki = 1000.0 * nd->papi_node[PAPI_L3_TCM] / n_insn;
+
+          const papi_long n_cyc_stall = nd->papi_node[PAPI_STL_CCY];
+          const papi_long n_cyc_stall_r = nd->papi_node[PAPI_RES_STL];
+          const papi_long n_cyc_full = nd->papi_node[PAPI_FUL_CCY];
+
           if ( curr_text_ypt < text_limit_ypt )
             fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">L3 %.3f MPKI</text>\n",
                     text_xpt, curr_text_ypt += baselineskip_ypt,
@@ -520,6 +526,24 @@ RV_Data::generate_graph_simple()
             fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%.1f IPC</text>\n",
                     text_xpt, curr_text_ypt += baselineskip_ypt,
                     double(n_insn) / n_cyc );
+          if ( curr_text_ypt < text_limit_ypt )
+            fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">Stallr %.1f%%</text>\n",
+                    text_xpt, curr_text_ypt += baselineskip_ypt,
+                    100.0 * double(n_cyc_stall_r) / n_cyc );
+          if ( curr_text_ypt < text_limit_ypt )
+            fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">Stall %.1f%%</text>\n",
+                    text_xpt, curr_text_ypt += baselineskip_ypt,
+                    100.0 * double(n_cyc_stall) / n_cyc );
+          if ( curr_text_ypt < text_limit_ypt )
+            fprintf
+              (fh, "<text x=\"%.3f\" y=\"%.3f\">Full %.1f%%</text>\n",
+               text_xpt, curr_text_ypt += baselineskip_ypt,
+               100.0 * n_cyc_full / n_cyc );
+          if ( curr_text_ypt < text_limit_ypt )
+            fprintf
+              (fh, "<text x=\"%.3f\" y=\"%.3f\">Fullns %.1f%%</text>\n",
+               text_xpt, curr_text_ypt += baselineskip_ypt,
+               100.0 * n_cyc_full / max(papi_long(1),n_cyc-n_cyc_stall) );
         }
 
       for ( auto& pair: nd->children ) stack.push_back(&pair.second);
