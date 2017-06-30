@@ -665,7 +665,6 @@ RV_Data::generate_timeline_simple()
     }
 
   // Finding patterns 
-  /*
   std::ostringstream seg_indices; 
   seg_indices << ";;";
   int counter = 0; 
@@ -676,7 +675,11 @@ RV_Data::generate_timeline_simple()
  
   PatternFinder* pt = new PatternFinder(seg_indices.str());
   pt->findPatterns(); 
-  */
+  pt->idx = 0; 
+  for (int i = 0; i < 500; i++) {
+    printf("%s ;; ", pt->getNext().c_str()); 
+  }
+  
  
   /// Write SVG Image of Segments
   //
