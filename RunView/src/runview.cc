@@ -185,10 +185,15 @@ RV_Data::atend()
 {
   /// Print Timer Data
 
+  DECLARE_CCTK_PARAMETERS;
+
   // If true, show lots of data.  Intended for debugging and
   // familiarization.
   //
   const bool show_all_timers = false;
+
+  string file_path = string(out_dir) + "/run-view-all-timers.txt";
+  FILE* const fh = show_all_timers ? fopen(file_path.c_str(),"w") : NULL;
 
   const int ntimers = CCTK_NumTimers();
   cTimerData* const td = CCTK_TimerCreateData();
@@ -199,10 +204,10 @@ RV_Data::atend()
 
   if ( show_all_timers )
     {
-      printf("Found %d timers.\n", ntimers);
-      printf("Found %zd events.\n", rv_ctimers.events.size());
+      fprintf(fh,"Found %d timers.\n", ntimers);
+      fprintf(fh,"Found %zd events.\n", rv_ctimers.events.size());
       for ( int i=0; i<nclocks; i++ )
-        printf("Clock %d: %s\n",i,CCTK_ClockName(i));
+        fprintf(fh,"Clock %d: %s\n",i,CCTK_ClockName(i));
     }
 
   // Organize timer data into a tree, timer_tree.
@@ -236,10 +241,10 @@ RV_Data::atend()
           // Compare duration of the RunView clock with the clock used
           // above.
           const double delta = fabs(timer_secs - t.duration_s) * 1e6;
-          printf("%10.6f %3.0f µs %s %3d %10lld %s\n",
-                 timer_secs, delta, tv->heading, t.missequence_count,
-                 t.papi_sample[PAPI_TOT_INS],
-                 name);
+          fprintf(fh,"%10.6f %3.0f µs %s %3d %10lld %s\n",
+                  timer_secs, delta, tv->heading, t.missequence_count,
+                  t.papi_sample[PAPI_TOT_INS],
+                  name);
         }
 
       //
@@ -272,6 +277,8 @@ RV_Data::atend()
     }
 
   CCTK_TimerDestroyData(td);
+
+  if ( fh ) fclose(fh);
 
   // Write out text and graphical representations of timer trees.
   //
@@ -341,7 +348,13 @@ RV_Data::generate_rect(double x, double y, double w, double scaler, double Psize
 void
 RV_Data::generate_text_tree()
 {
+  DECLARE_CCTK_PARAMETERS;
+
   // Write out a text representation of timer tree.
+
+  string file_path = string(out_dir) + "/run-view-timer-tree.txt";
+  FILE* const fh = fopen(file_path.c_str(),"w");
+  assert(fh);
 
   // Put root of tree on stack.
   vector<RV_Timer_Node*> stack = { &timer_tree };
@@ -350,13 +363,15 @@ RV_Data::generate_text_tree()
     {
       RV_Timer_Node* const nd = stack.back();  stack.pop_back();
 
-      printf
-        ("%10.6f %10.6f %10lld %s %s\n",
+      fprintf
+        (fh, "%10.6f %10.6f %10lld %s %s\n",
          nd->dur_node_s, nd->dur_kids_s, nd->papi_node[PAPI_TOT_INS],
          string(nd->level*2,' ').c_str(), nd->name.c_str());
 
       for ( auto& ch: nd->children ) stack.push_back(&ch.second);
     }
+
+  fclose(fh);
 }
 
 void
