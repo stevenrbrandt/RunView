@@ -152,6 +152,14 @@ RunView_init()
   //
   rv_data.init();
 
+  // Initialize the collection of CPU performance counter data. 
+
+  #ifdef HAVE_PAPI
+  rv_ctimers.papi_init; 
+  ( { PAPI_TOT_INS, PAPI_L3_TCM, PAPI_BR_MSP, PAPI_RES_STL,
+      PAPI_STL_CCY, PAPI_FUL_CCY, PAPI_TLB_DM } );
+  #endif
+
   return 0;
 }
 
@@ -442,6 +450,8 @@ RV_Data::generate_graph_simple()
   vector<RV_Timer_Node*> stack = { &timer_tree };
   timer_tree.pseudo_time_start = 0;
 
+  
+
   // NOT A ROBUST SYSTEM YET. ONLY WORKS IF CHILD OF ROOT IS CALLED MAIN
   // WHICH MAY NOT ALWAYS BE THE CASE? 
   timer_tree.dur_node_s = timer_tree.dur_kids_s; 
@@ -491,7 +501,6 @@ RV_Data::generate_graph_simple()
     }
 
   main->dur_node_s = 0; 
-  
 
   // Compute scale factors
   //
@@ -503,66 +512,100 @@ RV_Data::generate_graph_simple()
 
   const int width_char = 1.5 * level_to_pt / font_size;  // Approximate width.
 
+  stack.push_back(&timer_tree); 
+  while (stack.size()) {
+    RV_Timer_Node* const nd = stack.back(); stack.pop_back(); 
+
+    const double ht = nd->dur_node_s * s_to_pt;
+    const double top_ypt = nd->pseudo_time_start * s_to_pt;
+    
+    rect( nd->level * level_to_pt, top_ypt, level_to_pt, ht );
+    string name = escapeForXML( nd->name.substr(0,width_char) );
+    
+    const double baselineskip_ypt = font_size * 1.2;
+    const double text_limit_ypt = top_ypt + ht - baselineskip_ypt;
+    const double text_xpt = font_size + nd->level * level_to_pt;
+    double curr_text_ypt = nd->pseudo_time_start * s_to_pt;
+    
+    if ( curr_text_ypt < text_limit_ypt )
+      fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%s</text>\n",
+	      text_xpt, curr_text_ypt += baselineskip_ypt,
+	      name.c_str());
+    
+    /*
+    if ( nd->papi_node.filled() )
+      {
+	const papi_long n_insn =
+	  max(papi_long(1),nd->papi_node[PAPI_TOT_INS]);
+	const papi_long n_cyc = max(papi_long(1),nd->papi_node.cyc);
+	const double mpki = 1000.0 * nd->papi_node[PAPI_L3_TCM] / n_insn;
+	
+	const papi_long n_cyc_stall = nd->papi_node[PAPI_STL_CCY];
+	const papi_long n_cyc_stall_r = nd->papi_node[PAPI_RES_STL];
+	const papi_long n_cyc_full = nd->papi_node[PAPI_FUL_CCY];
+	
+	if ( curr_text_ypt < text_limit_ypt )
+	  fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">L3 %.3f MPKI</text>\n",
+		  text_xpt, curr_text_ypt += baselineskip_ypt,
+		  mpki );
+	if ( curr_text_ypt < text_limit_ypt )
+	  fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%.1f IPC</text>\n",
+		  text_xpt, curr_text_ypt += baselineskip_ypt,
+		  double(n_insn) / n_cyc );
+	if ( curr_text_ypt < text_limit_ypt )
+	  fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">Stallr %.1f%%</text>\n",
+		  text_xpt, curr_text_ypt += baselineskip_ypt,
+		  100.0 * double(n_cyc_stall_r) / n_cyc );
+	if ( curr_text_ypt < text_limit_ypt )
+	  fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">Stall %.1f%%</text>\n",
+		  text_xpt, curr_text_ypt += baselineskip_ypt,
+		  100.0 * double(n_cyc_stall) / n_cyc );
+	if ( curr_text_ypt < text_limit_ypt )
+	  fprintf
+	    (fh, "<text x=\"%.3f\" y=\"%.3f\">Full %.1f%%</text>\n",
+	     text_xpt, curr_text_ypt += baselineskip_ypt,
+	     100.0 * n_cyc_full / n_cyc );
+	if ( curr_text_ypt < text_limit_ypt )
+	  fprintf
+	    (fh, "<text x=\"%.3f\" y=\"%.3f\">Fullns %.1f%%</text>\n",
+	     text_xpt, curr_text_ypt += baselineskip_ypt,
+	     100.0 * n_cyc_full / max(papi_long(1),n_cyc-n_cyc_stall) );
+      }
+    */
+    
+    for ( auto& pair: nd->children ) stack.push_back(&pair.second);
+  }
+
   // setting up main for drawRectangles function
    main->percent_op = 100; 
 
-      const double ht = nd->dur_node_s * s_to_pt;
-      const double top_ypt = nd->pseudo_time_start * s_to_pt;
+  // Write to html file 
+  // Write SVG Header
+  fprintf(fh,"%s",
+	  "<html> \n <head> \n"
+	  "<meta http-equiv=\"Conten<h1></h1>t-Type\" content=\"text/html; charset=UTF-8\"> \n"
+	  "<script src=\"http://code.jquery.com/jquery-latest.min.js\"></script>\n"
+	  "</head> \n <body> \n"
+          "<?xml version=\"1.0\" standalone=\"no\"?>\n"
+          "<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\"\n"
+          " \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n"
+	  );
 
-      rect( nd->level * level_to_pt, top_ypt, level_to_pt, ht );
-      string name = escapeForXML( nd->name.substr(0,width_char) );
+  // Set SVG so that one user unit is one point. This is assuming that
+  // user has adjusted font rendering so that a ten-point font is the
+  // smallest size that's comfortably readable for substantial amounts
+  // of text.
+  //
+  fprintf(fh,"<svg width=\"%.3fpt\" height=\"%.3fpt\"\n"
+          "viewBox=\"0 0 %.3f %.3f\"\n"
+          "version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\">\n",
+          image_wpt, image_hpt, image_wpt, image_hpt);
 
-      const double baselineskip_ypt = font_size * 1.2;
-      const double text_limit_ypt = top_ypt + ht - baselineskip_ypt;
-      const double text_xpt = font_size + nd->level * level_to_pt;
-      double curr_text_ypt = nd->pseudo_time_start * s_to_pt;
+  fprintf(fh,"%s\n","<desc>Created by RunView</desc>");
+  fprintf(fh,"<g id=\"all\" font-size=\"%.3f\" font-family=\"sans-serif\">\n",
+          font_size);
 
-      if ( curr_text_ypt < text_limit_ypt )
-        fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%s</text>\n",
-                text_xpt, curr_text_ypt += baselineskip_ypt,
-                name.c_str());
-
-      if ( nd->papi_node.filled() )
-        {
-          const papi_long n_insn =
-            max(papi_long(1),nd->papi_node[PAPI_TOT_INS]);
-          const papi_long n_cyc = max(papi_long(1),nd->papi_node.cyc);
-          const double mpki = 1000.0 * nd->papi_node[PAPI_L3_TCM] / n_insn;
-
-          const papi_long n_cyc_stall = nd->papi_node[PAPI_STL_CCY];
-          const papi_long n_cyc_stall_r = nd->papi_node[PAPI_RES_STL];
-          const papi_long n_cyc_full = nd->papi_node[PAPI_FUL_CCY];
-
-          if ( curr_text_ypt < text_limit_ypt )
-            fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">L3 %.3f MPKI</text>\n",
-                    text_xpt, curr_text_ypt += baselineskip_ypt,
-                    mpki );
-          if ( curr_text_ypt < text_limit_ypt )
-            fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%.1f IPC</text>\n",
-                    text_xpt, curr_text_ypt += baselineskip_ypt,
-                    double(n_insn) / n_cyc );
-          if ( curr_text_ypt < text_limit_ypt )
-            fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">Stallr %.1f%%</text>\n",
-                    text_xpt, curr_text_ypt += baselineskip_ypt,
-                    100.0 * double(n_cyc_stall_r) / n_cyc );
-          if ( curr_text_ypt < text_limit_ypt )
-            fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">Stall %.1f%%</text>\n",
-                    text_xpt, curr_text_ypt += baselineskip_ypt,
-                    100.0 * double(n_cyc_stall) / n_cyc );
-          if ( curr_text_ypt < text_limit_ypt )
-            fprintf
-              (fh, "<text x=\"%.3f\" y=\"%.3f\">Full %.1f%%</text>\n",
-               text_xpt, curr_text_ypt += baselineskip_ypt,
-               100.0 * n_cyc_full / n_cyc );
-          if ( curr_text_ypt < text_limit_ypt )
-            fprintf
-              (fh, "<text x=\"%.3f\" y=\"%.3f\">Fullns %.1f%%</text>\n",
-               text_xpt, curr_text_ypt += baselineskip_ypt,
-               100.0 * n_cyc_full / max(papi_long(1),n_cyc-n_cyc_stall) );
-        }
-
-      for ( auto& pair: nd->children ) stack.push_back(&pair.second);
-    }
+  
 
   // draw rectangle around entire space
     fprintf(fh, "<rect  fill=\"rgb(203, 203, 203)\"  stroke=\"black\" "
@@ -586,6 +629,7 @@ RV_Data::generate_graph_simple()
    srand(time(NULL)); 
    double ta = generate_rect(main->level * level_to_pt, plot_area_top_ypt, 
 			     level_to_pt,level_to_pt, plot_area_hpt, main, fh); 
+
    fprintf(fh, "%s", "</g> \n"); 
    fprintf(fh, "%s", "</svg> \n"); 
    
@@ -714,10 +758,6 @@ RV_Data::generate_timeline_simple()
  
   PatternFinder* pt = new PatternFinder(seg_indices.str());
   pt->findPatterns(); 
-  pt->idx = 0; 
-  for (int i = 0; i < 500; i++) {
-    printf("%s ;; ", pt->getNext().c_str()); 
-  }
   
  
   /// Write SVG Image of Segments
