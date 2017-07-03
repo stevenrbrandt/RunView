@@ -73,7 +73,6 @@ class RV_PAPI_Manager {
 public:
 
   RV_PAPI_Manager(){ eset = PAPI_NULL; ncounters = -1; }
-  ~RV_PAPI_Manager() { destroy(); }
 
   int ncounters;
   int eset;
