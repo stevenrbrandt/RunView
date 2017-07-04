@@ -423,15 +423,38 @@ RV_Data::generate_graph_simple()
   //
   const double plot_area_left_xpt = 5;
   const double plot_area_top_ypt = 5;
-  const double plot_area_wpt = image_wpt -2 * plot_area_left_xpt;
-  const double plot_area_hpt = image_hpt -2 * plot_area_top_ypt;
+  const double plot_area_wpt = image_wpt - 2 * plot_area_left_xpt;
+  const double plot_area_hpt = image_hpt - 2 * plot_area_top_ypt;
 
+  // Write SVG Header
+  //
+  fprintf(fh,"%s",R"~~(<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+)~~");
 
-  // Convenience functions for emitting SVG rectangles.
-   auto rect = [&](double x, double y, double w, double h)
-     { fprintf(fh, "<rect fill=\"gray\" stroke=\"black\" "
-               "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n",
-               x, y, w, h); };
+  // Set SVG so that one user unit is one point. This is assuming that
+  // user has adjusted font rendering so that a ten-point font is the
+  // smallest size that's comfortably readable for substantial amounts
+  // of text.
+  //
+  fprintf(fh,R"~~(<svg width="%.3fpt" height="%.3fpt"
+          viewBox="0 0 %.3f %.3f"
+          version="1.1" xmlns="http://www.w3.org/2000/svg">
+)~~",
+          image_wpt, image_hpt, image_wpt, image_hpt);
+
+  fprintf(fh,"%s\n","<desc>Created by RunView</desc>");
+  fprintf(fh,R"--(<g font-size="%.3f" font-family="sans-serif">
+)--",
+          font_size);
+
+  // Convenience function for emitting SVG rectangles.
+  //
+  auto rect = [&](double x, double y, double w, double h)
+    { fprintf(fh, R"--(<rect fill="none" stroke="black"
+              x="%.3f" y="%.3f" width="%.3f" height="%.3f" />)--",
+              x, y, w, h); };
 
   // Emit a box around the entire plot area.
   // rect( plot_area_left_xpt, plot_area_top_ypt, plot_area_wpt-4, plot_area_hpt);
@@ -796,19 +819,10 @@ RV_Data::generate_timeline_simple()
   const double image_wpt = plot_area_wpt;
   const double image_hpt = plot_area_hpt;
 
-  fprintf(fh, "%s",
-	  "<html> \n <body> \n"); 
-
-  fprintf(fh, "%s",
-	  "<head> \n"
-	  "<meta http-equiv=\"Conten<h1></h1>t-Type\" content=\"text/html; charset=UTF-8\"> \n"
-	  "<script src=\"http://code.jquery.com/jquery-latest.min.js\"></script> \n"
-	  "</head> \n");
-
-  fprintf(fh,"%s",
-          "<?xml version=\"1.0\" standalone=\"no\"?>\n"
-          "<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\"\n"
-          "  \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n");
+  fprintf(fh,"%s",R"~~(<?xml version="1.0" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+)~~");
 
   // InfoBox information 
   fprintf(fh,"<svg width=\"%.3fpt\" height=\"100pt\"\n"
@@ -840,10 +854,10 @@ RV_Data::generate_timeline_simple()
   // smallest size that's comfortably readable for substantial amounts
   // of text.
   //
-  fprintf(fh,"<svg width=\"%.3fpt\" height=\"%.3fpt\"\n"
-          "viewBox=\"0 0 %.3f %.3f\"\n"
-	  "preserveAspectRatio = \"xMinYMin meet\" "
-          "version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\">\n",
+  fprintf(fh,R"~~(<svg width="%.3fpt" height="%.3fpt"
+          viewBox="0 0 %.3f %.3f"
+          version="1.1" xmlns="http://www.w3.org/2000/svg">
+)~~",
           image_wpt, image_hpt, image_wpt, image_hpt);
 
   fprintf(fh,"%s\n","<desc>Created by RunView</desc>");
@@ -852,12 +866,12 @@ RV_Data::generate_timeline_simple()
   //
   fprintf
     (fh,
-     "<rect id= \"background\" x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" "
-     "fill=\"#bbb\" stroke=\"none\"/>\n",
+     R"~~(<rect x="%.3f" y="%.3f" width="%.3f" height="%.3f"
+     fill="#bbb" stroke="none"/>)~~",
      0.0, 0.0, plot_area_wpt, plot_area_hpt);
 
-  fprintf(fh,"<g font-size=\"%.3f\" font-family=\"sans-serif\" "
-          "stroke-width=\"0.2\">\n", font_size);
+  fprintf(fh,R"~~(<g font-size="%.3f" font-family="sans-serif"
+          stroke-width="0.2">)~~", font_size);
 
   // Make main rectangle
   fprintf
@@ -883,29 +897,18 @@ RV_Data::generate_timeline_simple()
       const double ypt = s.level * level_to_pt;
       const double wpt = ( s.end_s - s.start_s ) * s_to_pt;
 
-      int clsName; 
-      std::ostringstream key;
-      key << s.timer_idx; 
-      events.push_back(s.timer_idx); 
-
-  
-      if (classNames.find(key.str()) != classNames.end()) {
-	clsName = classNames.find(key.str())->second; 
-      } else {
-	clsName = rand()%1000000; 
-	classNames.insert(std::pair<string,int>(key.str(),clsName));
-      } 
-
-      fprintf(fh, "<rect class=\"%d\" id=\"%s \" fill=\"white\" stroke=\"black\" "
-              "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n", 
-	      clsName, leaf_name[s.timer_idx].c_str(), xpt, ypt, wpt, seg_hpt);
+      fprintf(fh, R"~~(<rect fill="white" stroke="black"
+              x="%.3f" y="%.3f" width="%.3f" height="%.3f" />)~~",
+              xpt, ypt, wpt, seg_hpt);
 
       // Estimate width assuming that character width is font_size/1.2.
       const int width_char = 1.2 * wpt / font_size;
       const string name = escapeForXML( leaf_name[s.timer_idx].substr(0,width_char) );
 
       if ( width_char < 2 ) continue;
-      fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%s</text>\n",
+
+      string name = escapeForXML( leaf_name[s.timer_idx].substr(0,width_char) );
+      fprintf(fh, R"--(<text x="%.3f" y="%.3f">%s</text>)--",
               xpt + 0.5*font_size, ypt + font_size, name.c_str() );
     }
 
