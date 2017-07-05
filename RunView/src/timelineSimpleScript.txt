@@ -1,0 +1,34 @@
+<script type="text/javascript">    
+    $('rect').mouseenter(function () highlight(this));  
+    $('rect').click(function () zoom(this));  
+    $('rect').dblclick(function () reset()); 
+
+function reset() {
+    var mySVG = document.getElementsByTagName("svg")[1];
+    var height = Number(mySVG.getAttribute("width"));
+    var width = Number(mySVG.getAttribute("height")); 
+    mySVG.setAttribute("viewBox","0 0 "+width+" "+height + "");   
+    }
+
+function highlight(rect) {    
+    var clsName = rect.getAttribute('class');    
+    $('.'+clsName).attr("fill", "rgb(255,145, 48)");    
+    $('.'+clsName).mouseleave( function() {$('.'+clsName).attr("fill", "white"); }); }  
+  
+function zoom(rect) {  
+    var mySVG = document.getElementsByTagName("svg")[1];   
+    var svgSpace = document.getElementById("background");  
+    var clsName = rect.getAttribute("class"); 
+    var els = document.getElementsByClassName(clsName);     
+    var lastIdx = els.length - 1; 
+    var last = els.item(lastIdx);  
+    var first = els.item(0); 
+    var x = Number(first.getAttribute("x"));  
+    var y = Number(rect.getAttribute("y"));  
+   
+    var w = Number(last.getAttribute("x")) - Number(first.getAttribute("x")) + Number(rect.getAttribute("width"));  
+    var h = Number(svgSpace.getAttribute("height") - Number(rect.getAttribute("y")));  
+    mySVG.setAttribute("viewBox",x+" "+y+" "+w+" "+h);  
+}  
+</script> 
+ 
