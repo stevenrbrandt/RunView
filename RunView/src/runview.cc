@@ -183,8 +183,8 @@ RV_Data::init()
   //
 #ifdef HAVE_PAPI
   rv_ctimers.papi_init
-    ( { PAPI_TOT_INS, PAPI_L3_TCM, PAPI_BR_MSP, PAPI_RES_STL,
-        PAPI_STL_CCY, PAPI_FUL_CCY, PAPI_TLB_DM } );
+    ( { PAPI_TOT_INS, PAPI_L3_TCM, PAPI_RES_STL,
+        PAPI_STL_CCY, PAPI_FUL_CCY } );
 #endif
 }
 

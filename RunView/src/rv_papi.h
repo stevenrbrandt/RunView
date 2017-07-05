@@ -107,9 +107,8 @@ extern RV_PAPI_Manager rv_papi_manager;
 inline papi_long
 RV_PAPI_Sample::operator [](int papi_event) const
 {
-  if ( values.empty() ) return 0;
+  if ( !available(papi_event) ) return 0;
   auto idxi = rv_papi_manager.event_to_idx.find(papi_event);
-  assert( idxi != rv_papi_manager.event_to_idx.end() );
   return values[idxi->second];
 }
 
