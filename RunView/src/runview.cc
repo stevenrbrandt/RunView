@@ -16,14 +16,14 @@
 
 using namespace std;
 
-std::string getfilepath(string fN) 
+string getfilepath(string fN) 
   {
      char result[ PATH_MAX ];
      ssize_t count = readlink( "/proc/self/exe", result, PATH_MAX ); 
-     string exePath = std::string(result, (count > 0) ? count : 0);
+     string exePath = string(result, (count > 0) ? count : 0);
 
      // redirect to directory holding javascript file
-     std::size_t found = exePath.find("exe"); 
+     size_t found = exePath.find("exe"); 
      string fileName = exePath.substr(0,found) + 
      "arrangements/RunView/RunView/src/" + fN;
 
@@ -138,6 +138,7 @@ public:
   void generate_graph_simple();
   void generate_timeline_simple();
   RV_Timer_Node timer_tree;
+  int id_serial; 
 };
 
 RV_Data rv_data;
@@ -298,7 +299,8 @@ RV_Data::atend()
 }
 
 double 
-RV_Data::generate_rect(double x, double y, double w, double scaler, double Psize, RV_Timer_Node* curr, FILE* fh) 
+RV_Data::generate_rect(double x, double y, double w, double scaler,
+ double Psize, RV_Timer_Node* curr, FILE* fh) 
 { 
   double h = Psize *( curr->percent_op/100); 
   
@@ -535,6 +537,7 @@ RV_Data::generate_graph_simple()
 
   const int width_char = 1.5 * level_to_pt / font_size;  // Approximate width.
 
+  /*
   stack.push_back(&timer_tree); 
   while (stack.size()) {
     RV_Timer_Node* const nd = stack.back(); stack.pop_back(); 
@@ -555,7 +558,7 @@ RV_Data::generate_graph_simple()
 	      text_xpt, curr_text_ypt += baselineskip_ypt,
 	      name.c_str());
     
-    /*
+    
     if ( nd->papi_node.filled() )
       {
 	const papi_long n_insn =
@@ -594,10 +597,11 @@ RV_Data::generate_graph_simple()
 	     text_xpt, curr_text_ypt += baselineskip_ypt,
 	     100.0 * n_cyc_full / max(papi_long(1),n_cyc-n_cyc_stall) );
       }
-    */
+    
     
     for ( auto& pair: nd->children ) stack.push_back(&pair.second);
   }
+  */
 
   // setting up main for drawRectangles function
    main->percent_op = 100; 
@@ -770,6 +774,7 @@ RV_Data::generate_timeline_simple()
       }
     }
 
+  /*
   // Finding patterns 
   std::ostringstream seg_indices; 
   seg_indices << ";;";
@@ -781,7 +786,7 @@ RV_Data::generate_timeline_simple()
  
   PatternFinder* pt = new PatternFinder(seg_indices.str());
   pt->findPatterns(); 
-  
+  */
  
   /// Write SVG Image of Segments
   //
@@ -800,7 +805,7 @@ RV_Data::generate_timeline_simple()
 
   // Total time
   double duration = seg_info.back().end_s; 
-
+  printf("\n\n duration: %.3f \n \nf", duration); 
   //
   // Level to Point
   const double level_ht_lines = 2;
@@ -847,6 +852,36 @@ RV_Data::generate_timeline_simple()
 	  "<tspan class= \"textEl\" x=\"9.000\" dy=\"10\">Honor: %s </tspan>"
 	  "<tspan class= \"textEl\" x=\"9.000\" dy=\"10\">Is this Zuko: %s </tspan> \n"
 	  "</text> \n </g> \n </svg> \n", image_wpt, name.c_str(), duration, happy.c_str(), honor.c_str(), zuko.c_str() );
+
+  // Drawing the timeline
+  double secMarks = floor (duration); 
+  double endSpace = duration - secMarks; 
+  double spaceBtwTicks = ((image_wpt * secMarks) / duration) / secMarks; 
+  
+  fprintf(fh,"<svg width=\"%.3fpt\" height=\"35pt\"\n"
+	  "viewbox=\"0 0 %.3f 35\""
+          "version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\">\n",
+          image_wpt, image_wpt);
+
+  fprintf(fh, "<g font-size=\"10.000\" font-family=\"sans-serif\" stroke-width=\"0.2\"> \n"
+	  "<line x1=\"0\" y1=\"20\" x2=\"%.3f\" y2=\"20\"  style=\"stroke:rgb(0,0,0);stroke-width:1\"/> \n"
+	  , image_wpt);
+ 
+  // setting tick mark locations
+  double xLocation = 0;
+
+  for (int i = 0; i <= secMarks; i++) {
+    fprintf(fh, "<line x1=\"%.3f\" y1=\"15\" x2=\"%.3f\" y2=\"25\" style=\"stroke:rgb(0,0,0);stroke-width:1\"/> \n", xLocation, xLocation); 
+
+    if (i > 0) {
+    fprintf(fh, "<text x=\"%.3f\" y=\"9\" > %d </text> \n", xLocation-3, i); 
+    }
+
+    xLocation = xLocation + spaceBtwTicks;
+  }
+
+  fprintf(fh, "</g> \n </svg>"); 
+
 
 
   // Set SVG so that one user unit is one point. This is assuming that
