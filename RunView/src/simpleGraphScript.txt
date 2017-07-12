@@ -42,6 +42,9 @@
     var textEls = document.getElementById(text).getElementsByClassName("textEl"); 
     textEls.item(0).setAttribute("x", x+5); 
     textEls.item(1).setAttribute("x", x+5); 
+    textEls.item(2).setAttribute("x", x+5);
+    textEls.item(3).setAttribute("x", x+5); 
+    textEls.item(4).setAttribute("x", x+5); 
     } 
     
     } 
@@ -55,9 +58,14 @@
     var textEl = document.getElementById(text); 
     textEl.setAttribute("y", "15"); 
     textEl.setAttribute("font-size", "10"); 
+
     var textEls = document.getElementById(text).getElementsByClassName("textEl"); 
     textEls.item(0).setAttribute("x", "10"); 
     textEls.item(1).setAttribute("x", "10"); 
+    textEls.item(2).setAttribute("x", "10");
+    textEls.item(3).setAttribute("x", "10"); 
+    textEls.item(4).setAttribute("x", "10");
+
     $(document.getElementById(name)).show(); 
     $(document.getElementById(decendants)).find(".myrect").show(); 
     $(document.getElementById(text)).show(); 

@@ -7,11 +7,11 @@ using namespace std;
 
 class PatternFinder {
 public:
-  PatternFinder(string str); 
-  string els;
-  std::vector<string> patterns; 
-  int idx; 
-  string getNext(); 
-  void clean(); 
-  void findPatterns();
+  PatternFinder(vector<int>); 
+  vector<int> list;
+  vector<vector<int>*> patterns; 
+  vector<vector<int>*> getPatterns(); 
+  void buildVector();
+  void sort(); 
+
 };

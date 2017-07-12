@@ -13,6 +13,7 @@
 #include "ctimers.h"
 #include "util.h"
 #include "rv_papi.h"
+#include <cmath>
 
 using namespace std;
 
@@ -133,7 +134,7 @@ public:
   RV_Data():timer_tree("root"){};
   void init();
   int atend();
-  double generate_rect(double x, double y, double w, double scaler, double Psize, RV_Timer_Node* curr, FILE* fh);
+  double generate_rect(double y, double w, double scaler, double Psize, RV_Timer_Node* curr, FILE* fh);
   void generate_text_tree();
   void generate_graph_simple();
   void generate_timeline_simple();
@@ -152,14 +153,6 @@ RunView_init()
   // Initialize the collection of timer event data
   //
   rv_data.init();
-
-  // Initialize the collection of CPU performance counter data. 
-
-  #ifdef HAVE_PAPI
-  rv_ctimers.papi_init; 
-  ( { PAPI_TOT_INS, PAPI_L3_TCM, PAPI_BR_MSP, PAPI_RES_STL,
-      PAPI_STL_CCY, PAPI_FUL_CCY, PAPI_TLB_DM } );
-  #endif
 
   return 0;
 }
@@ -299,52 +292,105 @@ RV_Data::atend()
 }
 
 double 
-RV_Data::generate_rect(double x, double y, double w, double scaler,
+RV_Data::generate_rect(double y, double w, double scaler,
  double Psize, RV_Timer_Node* curr, FILE* fh) 
 { 
-  double h = Psize *( curr->percent_op/100); 
-  
-  // Random number for tracking
-  int name = rand()%10000000; 
+  double h = Psize *( curr->percent_op); 
+  const double x = curr->level*scaler; 
 
-  std::ostringstream dNames;
-  dNames << name << "D";             // name of decendant group
-  std::ostringstream tName;
-  tName << name << "TXT";            // text of name
-  std::string pName = curr->name;    // print version of name
+  // Random number for tracking
+  int name = id_serial++; 
+
+  string dNames = to_string(name) + "D";
+  string tName = to_string(name) + "TXT"; 
+  string pName = curr->name;    
+
   if (pName.length() > 13) {         // shortens print name if larger than 13 characters
     pName = pName.substr(0,10);
   } 
 
-  // Color based on runtime
-  const char* const fill_color=
-    curr->percent_pp < .3? "rgb(179, 225, 255)":
-    curr->percent_pp < 10? "rgb(53,133,223)":"rgb(255,125,37)";
+  // Declaring colors
+  string red;
+  string green; 
+  string blue = "50";
 
-  // Draw Rectangle 
-  fprintf(fh, "<rect class=\"myrect\" id=\"%d\" fill=\"%s\" stroke=\"black\" x=\"%.3f\" y=\"%.3f\""
-	  "width=\"%.3f\" height=\"%.3f\" />\n", name,fill_color, x, y, w, h); 
+  // Declaring values for drawing
+  double mpkiC; 
+  double full; 
+  double fullns; 
+  double stall; 
+
+  // Color
+  string fill_color = "rgb(179, 225, 255)"; 
+
+  if ( curr->papi_node.filled() )
+    {
+      const papi_long n_insn =
+	max(papi_long(1),curr->papi_node[PAPI_TOT_INS]);
+      const papi_long n_cyc = max(papi_long(1),curr->papi_node.cyc);
+      const double mpki = 1000.0 * curr->papi_node[PAPI_L3_TCM] / n_insn;
+      
+      const papi_long n_cyc_stall = curr->papi_node[PAPI_STL_CCY];
+      const papi_long n_cyc_stall_r = curr->papi_node[PAPI_RES_STL];
+      const papi_long n_cyc_full = curr->papi_node[PAPI_FUL_CCY];
+	
+      // Scaling colors based on full and fullns :: EXCEPT IT DOES NOT, CHECK IT OUT
+      fullns = 100.0 * n_cyc_full / max(papi_long(1),n_cyc-n_cyc_stall);
+      full = 100.0 * n_cyc_full / n_cyc;
+      mpkiC = mpki; 
+      stall =  100.00 * double(n_cyc_stall) / n_cyc;
+      
+      int r = abs(255*full / 100 - 255);
+      int g = abs((255 * fullns) / 100);
+      green = to_string(g);
+      red = to_string(r);
+      
+
+      fill_color = "rgb(" + red +"," +green+"," + blue + ")";
+    }
+
+  // Drawing rectangle
+  fprintf(fh, "<rect class=\"myrect\" id=\"%d\" fill=\"%s\" stroke=\"black\" x=\"%.3f\" "
+	  "y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" /> \n ", 
+	  name, fill_color.c_str(), x, y, w, h);
+
+  // Calculating radius based on stall & rectangle width:: EXCEPT THIS DOESN'T WORK
+  /*
+  double radius = sqrt((stall/100) * (w*h) * (4* atan(1)));
+  
+
+  fprintf(fh, "<circle class=\"circle\" cx=\"%d\" cy=\"%d\" r=\"%.5f\" fill=\"white\" "
+	  "stroke=\"black\" /> \n", (int)( x+w/2), (int) (y+h/2), radius);
+  */
 
   // printing the text
   if ( h >= 20 ) {
     fprintf(fh, "<text id=\"%s\" class=\"text\" y=\"%.3f\" font-size=\"10\" > \n"
 	    "<tspan class=\"textEl\" x=\"%.3f\"> %s </tspan> \n"
-	    "<tspan class=\"textEl\" x=\"%.3f\" dy=\"10\">%% %.5f </tspan> \n"
-	    "</text> \n", tName.str().c_str(), y+10, x+4, pName.c_str(), x+4, curr->percent_pp);
+	    "<tspan class=\"textEl\" x=\"%.3f\" dy=\"10\">%%PP: %.3f </tspan> \n" 
+	    "<tspan class=\"textEl\" x=\"%.3f\" dy=\"10\">%%Stall: %.3f </tspan> \n"
+	    "<tspan class=\"textEl\" x=\"%.3f\" dy=\"10\">%%Full: %.3f </tspan> \n" 
+ 	    "<tspan class=\"textEl\" x=\"%.3f\" dy=\"10\">%%Fullns: %.3f </tspan> \n" 
+	    "</text> \n", tName.c_str(), y+10, x+4, pName.c_str(), x+4, curr->percent_pp*100, 
+	    x+4, stall, x+4, full, x+4, fullns);
   } else {
     fprintf(fh, "<text id=\"%s\" class=\"text\" y=\"0\" font-size=\"0\" > \n"
 	    "<tspan class=\"textEl\" x=\"0\"> %s </tspan> \n"
-	    "<tspan class=\"textEl\" x=\"0\" dy=\"10\">%% %.5f </tspan> \n"
-	    "</text>\n", tName.str().c_str(), pName.c_str(), curr->percent_pp);
+	    "<tspan class=\"textEl\" x=\"0\" dy=\"10\">%%PP: %.3f </tspan> \n"
+	    "<tspan class=\"textEl\" x=\"0\" dy=\"10\">%%Stall: %.3f </tspan> \n" 
+	    "<tspan class=\"textEl\" x=\"0\" dy=\"10\">%%Full: %.3f </tspan> \n" 
+	    "<tspan class=\"textEl\" x=\"0\" dy=\"10\">%%Fullns: %.3f </tspan> \n" 
+	    "</text> \n", tName.c_str(), y+10, x+4, pName.c_str(), curr->percent_pp*100, 
+	    stall, full, fullns);
   }
 
   if (curr->children.size() != 0) {
-    fprintf(fh, "<g id=\"%s\"> \n", dNames.str().c_str()); 
+    fprintf(fh, "<g id=\"%s\"> \n", dNames.c_str()); 
+
   // drawing rectangles of children
   for (auto& elt: curr->children) {
     RV_Timer_Node* const ch = &elt.second;
-    x = ch->level*scaler; 
-    double t = generate_rect(x,y,w,scaler,h,ch, fh);
+    double t = generate_rect(y,w,scaler,h,ch, fh);
     y += t;
   }
   fprintf(fh, "</g> \n"); 
@@ -430,6 +476,7 @@ RV_Data::generate_graph_simple()
 
   // Write SVG Header
   //
+  /*
   fprintf(fh,"%s",R"~~(<?xml version="1.0" standalone="no"?>
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
   "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
@@ -451,8 +498,36 @@ RV_Data::generate_graph_simple()
 )--",
           font_size);
 
+  */
   // Convenience function for emitting SVG rectangles.
   //
+
+    // Write to html file 
+  // Write SVG Header
+  fprintf(fh,"%s",
+	  "<html> \n <head> \n"
+	  "<meta http-equiv=\"Conten<h1></h1>t-Type\" content=\"text/html; charset=UTF-8\"> \n"
+	  "<script src=\"http://code.jquery.com/jquery-latest.min.js\"></script>\n"
+	  "</head> \n <body> \n"
+          "<?xml version=\"1.0\" standalone=\"no\"?>\n"
+          "<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\"\n"
+          " \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n"
+	  );
+
+  // Set SVG so that one user unit is one point. This is assuming that
+  // user has adjusted font rendering so that a ten-point font is the
+  // smallest size that's comfortably readable for substantial amounts
+  // of text.
+  //
+  fprintf(fh,"<svg width=\"%.3fpt\" height=\"%.3fpt\"\n"
+          "viewBox=\"0 0 %.3f %.3f\"\n"
+          "version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\">\n",
+          image_wpt, image_hpt, image_wpt, image_hpt);
+
+  fprintf(fh,"%s\n","<desc>Created by RunView</desc>");
+  fprintf(fh,"<g id=\"all\" font-size=\"%.3f\" font-family=\"sans-serif\">\n",
+          font_size);
+
   auto rect = [&](double x, double y, double w, double h)
     { fprintf(fh, R"--(<rect fill="none" stroke="black"
               x="%.3f" y="%.3f" width="%.3f" height="%.3f" />)--",
@@ -479,6 +554,7 @@ RV_Data::generate_graph_simple()
 
   // NOT A ROBUST SYSTEM YET. ONLY WORKS IF CHILD OF ROOT IS CALLED MAIN
   // WHICH MAY NOT ALWAYS BE THE CASE? 
+
   timer_tree.dur_node_s = timer_tree.dur_kids_s; 
   RV_Timer_Node* main = &timer_tree.children.find("main")->second; 
   double total_time = main->dur_kids_s; 
@@ -498,7 +574,7 @@ RV_Data::generate_graph_simple()
            nd->dur_node_s, nd->dur_kids_s, pseudo_time_start,
            string(nd->level*2,' ').c_str(), nd->name.c_str());
 
-       nd->percent_pp = ((nd->dur_node_s - nd->dur_kids_s)/total_time)*100; 
+       nd->percent_pp = ((nd->dur_node_s - nd->dur_kids_s)/total_time); 
 
       // Set the pseudo_time_start members of this node's children.
       //
@@ -508,7 +584,7 @@ RV_Data::generate_graph_simple()
           ch->pseudo_time_start = pseudo_time_start;
 
 	  // calculating relevant percentages
-	  ch->percent_op = (ch->dur_node_s / nd->dur_node_s)*100;
+	  ch->percent_op = (ch->dur_node_s / nd->dur_node_s);
 	 
 
           // Push ch on the stack so pseudo_time_start can be set for
@@ -537,107 +613,79 @@ RV_Data::generate_graph_simple()
 
   const int width_char = 1.5 * level_to_pt / font_size;  // Approximate width.
 
-  /*
+  
   stack.push_back(&timer_tree); 
   while (stack.size()) {
     RV_Timer_Node* const nd = stack.back(); stack.pop_back(); 
 
-    const double ht = nd->dur_node_s * s_to_pt;
-    const double top_ypt = nd->pseudo_time_start * s_to_pt;
+   const double ht = nd->dur_node_s * s_to_pt;
+   const double top_ypt = nd->pseudo_time_start * s_to_pt;
     
-    rect( nd->level * level_to_pt, top_ypt, level_to_pt, ht );
-    string name = escapeForXML( nd->name.substr(0,width_char) );
+   rect( nd->level * level_to_pt, top_ypt, level_to_pt, ht );
+   string name = escapeForXML( nd->name.substr(0,width_char) );
+   
+  const double baselineskip_ypt = font_size * 1.2;
+  const double text_limit_ypt = top_ypt + ht - baselineskip_ypt;
+  const double text_xpt = font_size + nd->level * level_to_pt;
+  double curr_text_ypt = nd->pseudo_time_start * s_to_pt;
     
-    const double baselineskip_ypt = font_size * 1.2;
-    const double text_limit_ypt = top_ypt + ht - baselineskip_ypt;
-    const double text_xpt = font_size + nd->level * level_to_pt;
-    double curr_text_ypt = nd->pseudo_time_start * s_to_pt;
+  if (nd->papi_node.filled()){
+    
+    const papi_long n_insn =
+	    max(papi_long(1),nd->papi_node[PAPI_TOT_INS]);
+    const papi_long n_cyc = max(papi_long(1),nd->papi_node.cyc);
+    const double mpki = 1000.0 * nd->papi_node[PAPI_L3_TCM] / n_insn;
+    
+    const papi_long n_cyc_stall = nd->papi_node[PAPI_STL_CCY];
+    const papi_long n_cyc_stall_r = nd->papi_node[PAPI_RES_STL];
+    const papi_long n_cyc_full = nd->papi_node[PAPI_FUL_CCY];
     
     if ( curr_text_ypt < text_limit_ypt )
       fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%s</text>\n",
+  	      text_xpt, curr_text_ypt += baselineskip_ypt,
+  	      name.c_str());
+    
+    
+    if ( curr_text_ypt < text_limit_ypt )
+      fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">L3 %.3f MPKI</text>\n",
 	      text_xpt, curr_text_ypt += baselineskip_ypt,
-	      name.c_str());
-    
-    
-    if ( nd->papi_node.filled() )
-      {
-	const papi_long n_insn =
-	  max(papi_long(1),nd->papi_node[PAPI_TOT_INS]);
-	const papi_long n_cyc = max(papi_long(1),nd->papi_node.cyc);
-	const double mpki = 1000.0 * nd->papi_node[PAPI_L3_TCM] / n_insn;
-	
-	const papi_long n_cyc_stall = nd->papi_node[PAPI_STL_CCY];
-	const papi_long n_cyc_stall_r = nd->papi_node[PAPI_RES_STL];
-	const papi_long n_cyc_full = nd->papi_node[PAPI_FUL_CCY];
-	
-	if ( curr_text_ypt < text_limit_ypt )
-	  fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">L3 %.3f MPKI</text>\n",
-		  text_xpt, curr_text_ypt += baselineskip_ypt,
-		  mpki );
-	if ( curr_text_ypt < text_limit_ypt )
-	  fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%.1f IPC</text>\n",
-		  text_xpt, curr_text_ypt += baselineskip_ypt,
-		  double(n_insn) / n_cyc );
-	if ( curr_text_ypt < text_limit_ypt )
-	  fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">Stallr %.1f%%</text>\n",
-		  text_xpt, curr_text_ypt += baselineskip_ypt,
-		  100.0 * double(n_cyc_stall_r) / n_cyc );
-	if ( curr_text_ypt < text_limit_ypt )
-	  fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">Stall %.1f%%</text>\n",
-		  text_xpt, curr_text_ypt += baselineskip_ypt,
-		  100.0 * double(n_cyc_stall) / n_cyc );
-	if ( curr_text_ypt < text_limit_ypt )
-	  fprintf
-	    (fh, "<text x=\"%.3f\" y=\"%.3f\">Full %.1f%%</text>\n",
-	     text_xpt, curr_text_ypt += baselineskip_ypt,
-	     100.0 * n_cyc_full / n_cyc );
-	if ( curr_text_ypt < text_limit_ypt )
-	  fprintf
-	    (fh, "<text x=\"%.3f\" y=\"%.3f\">Fullns %.1f%%</text>\n",
-	     text_xpt, curr_text_ypt += baselineskip_ypt,
-	     100.0 * n_cyc_full / max(papi_long(1),n_cyc-n_cyc_stall) );
-      }
-    
-    
-    for ( auto& pair: nd->children ) stack.push_back(&pair.second);
+	      mpki );
+    if ( curr_text_ypt < text_limit_ypt )
+      fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%.1f IPC</text>\n",
+	      text_xpt, curr_text_ypt += baselineskip_ypt,
+	      double(n_insn) / n_cyc );
+    if ( curr_text_ypt < text_limit_ypt )
+      fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">Stallr %.1f%%</text>\n",
+	      text_xpt, curr_text_ypt += baselineskip_ypt,
+	      100.0 * double(n_cyc_stall_r) / n_cyc );
+    if ( curr_text_ypt < text_limit_ypt )
+      fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">Stall %.1f%%</text>\n",
+	      text_xpt, curr_text_ypt += baselineskip_ypt,
+	      100.0 * double(n_cyc_stall) / n_cyc );
+    if ( curr_text_ypt < text_limit_ypt )
+      fprintf
+	(fh, "<text x=\"%.3f\" y=\"%.3f\">Full %.1f%%</text>\n",
+	 text_xpt, curr_text_ypt += baselineskip_ypt,
+	 100.0 * n_cyc_full / n_cyc );
+    if ( curr_text_ypt < text_limit_ypt )
+      fprintf
+	(fh, "<text x=\"%.3f\" y=\"%.3f\">Fullns %.1f%%</text>\n",
+	 text_xpt, curr_text_ypt += baselineskip_ypt,
+	 100.0 * n_cyc_full / max(papi_long(1),n_cyc-n_cyc_stall) );
   }
-  */
-
-  // setting up main for drawRectangles function
-   main->percent_op = 100; 
-
-  // Write to html file 
-  // Write SVG Header
-  fprintf(fh,"%s",
-	  "<html> \n <head> \n"
-	  "<meta http-equiv=\"Conten<h1></h1>t-Type\" content=\"text/html; charset=UTF-8\"> \n"
-	  "<script src=\"http://code.jquery.com/jquery-latest.min.js\"></script>\n"
-	  "</head> \n <body> \n"
-          "<?xml version=\"1.0\" standalone=\"no\"?>\n"
-          "<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\"\n"
-          " \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n"
-	  );
-
-  // Set SVG so that one user unit is one point. This is assuming that
-  // user has adjusted font rendering so that a ten-point font is the
-  // smallest size that's comfortably readable for substantial amounts
-  // of text.
-  //
-  fprintf(fh,"<svg width=\"%.3fpt\" height=\"%.3fpt\"\n"
-          "viewBox=\"0 0 %.3f %.3f\"\n"
-          "version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\">\n",
-          image_wpt, image_hpt, image_wpt, image_hpt);
-
-  fprintf(fh,"%s\n","<desc>Created by RunView</desc>");
-  fprintf(fh,"<g id=\"all\" font-size=\"%.3f\" font-family=\"sans-serif\">\n",
-          font_size);
-
   
+  for ( auto& pair: nd->children ) stack.push_back(&pair.second);
+  }  
+  
+  // setting up main for drawRectangles function
+   main->percent_op = 1; 
 
   // draw rectangle around entire space
-    fprintf(fh, "<rect  fill=\"rgb(203, 203, 203)\"  stroke=\"black\" "
-	    "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n", plot_area_left_xpt,  
-	    plot_area_top_ypt, plot_area_wpt -4, plot_area_hpt);
+   /*
+   fprintf(fh, "<rect  fill=\"rgb(203, 203, 203)\"  stroke=\"black\" "
+	   "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n", plot_area_left_xpt,  
+	   plot_area_top_ypt, plot_area_wpt -4, plot_area_hpt);
+   */
 
    // Draw root rectangle
    fprintf(fh, "<rect id=\"%s\" class=\"myrect\" fill=\"rgb(179, 225, 255)\" stroke=\"black\" "
@@ -647,15 +695,14 @@ RV_Data::generate_graph_simple()
     fprintf(fh, "<text id=\"rootTXT\" class=\"text\" y=\"%.3f\" font-size=\"10\" > \n"
 	    "<tspan class=\"textEl\" x=\"%.3f\"> %s </tspan> \n"
 	    "<tspan class= \"textEl\" x=\"%.3f\" dy=\"10\">%% %.5f </tspan> \n"
-	    "</text> \n",  plot_area_top_ypt+10, plot_area_left_xpt+4, timer_tree.name.c_str(), 
+	    "</text> \n",  plot_area_top_ypt+10, plot_area_left_xpt+4, timer_tree.name.c_str(),
 	    plot_area_left_xpt+4, timer_tree.percent_pp);
    
    fprintf(fh, "<g id=\"rootD\" > \n");
 
    // Draw rectangles
-   srand(time(NULL)); 
-   double ta = generate_rect(main->level * level_to_pt, plot_area_top_ypt, 
-			     level_to_pt,level_to_pt, plot_area_hpt, main, fh); 
+   double ta = generate_rect(plot_area_top_ypt, level_to_pt,level_to_pt, 
+			     plot_area_hpt, main, fh); 
 
    fprintf(fh, "%s", "</g> \n"); 
    fprintf(fh, "%s", "</svg> \n"); 
@@ -774,19 +821,14 @@ RV_Data::generate_timeline_simple()
       }
     }
 
-  /*
+  
   // Finding patterns 
-  std::ostringstream seg_indices; 
-  seg_indices << ";;";
-  int counter = 0; 
+  vector<int> seg_indices; 
   for (auto& s:seg_info) {
-    seg_indices << s.timer_idx << ";;"; 
-    counter++; 
+    seg_indices.push_back(s.timer_idx); 
   }
  
-  PatternFinder* pt = new PatternFinder(seg_indices.str());
-  pt->findPatterns(); 
-  */
+  PatternFinder* pf = new PatternFinder(seg_indices); 
  
   /// Write SVG Image of Segments
   //
@@ -923,8 +965,6 @@ RV_Data::generate_timeline_simple()
   // Generate SVG for individual segments.
   // Also tracking for pattern recognition
   vector<int> events; 
-  map<string, int> classNames; 
-  srand(time(NULL)); 
 
   for ( auto& s: seg_info )
     {
@@ -932,9 +972,11 @@ RV_Data::generate_timeline_simple()
       const double ypt = s.level * level_to_pt;
       const double wpt = ( s.end_s - s.start_s ) * s_to_pt;
 
-      fprintf(fh, R"~~(<rect fill="white" stroke="black"
-              x="%.3f" y="%.3f" width="%.3f" height="%.3f" />)~~",
-              xpt, ypt, wpt, seg_hpt);
+      string clsName = "timer-" + to_string(s.timer_idx); 
+
+      fprintf(fh, "<rect class=\"%s\" id=\"%s \" fill=\"white\" stroke=\"black\" "
+              "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n", 
+	      clsName.c_str(), leaf_name[s.timer_idx].c_str(), xpt, ypt, wpt, seg_hpt);
 
       // Estimate width assuming that character width is font_size/1.2.
       const int width_char = 1.2 * wpt / font_size;
