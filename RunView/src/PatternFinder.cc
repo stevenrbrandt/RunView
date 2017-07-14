@@ -19,10 +19,46 @@ PatternFinder::PatternFinder(vector<int> v) {
   list = v; 
   buildVector(); 
   sort(); 
+  getPatterns(); 
 }
 
 vector<int> PatternFinder::getPatterns() {
-  return patterns; 
+  int patternLength = 3; 
+  int n = patterns.size(); 
+  int tracker = 0; 
+  int counter = 0;
+
+  while (true) {
+    int start = patterns[tracker]; 
+    vector<int> currPat; 
+    for (int i = start; i < start + patternLength; i++) {
+      currPat.push_back(list[i]); 
+    }
+
+    while (true) {
+      vector<int> comPat;
+      for (int i = patterns[tracker+1]; i < patterns[tracker+1]+patternLength; i++) {
+	comPat.push_back(list[i]); 
+      }
+      
+      if (currPat == comPat) {
+	tracker++; 
+	if (tracker > n-1) {patternTracker.push_back(tracker); break;}
+      } else { 
+	patternTracker.push_back(tracker);
+	tracker++;
+	break; 
+      }
+    }
+    if (tracker > n-1) break; 
+  }
+  
+  printf("\n Pattern Tracker:  \n" ); 
+  for (int i = 0; i < patternTracker.size(); i++) {
+    printf("%d | %d \n", i, patternTracker[i]); 
+  } 
+  
+  return patternTracker; 
 }
 
 void PatternFinder::buildVector() {
@@ -120,36 +156,29 @@ void PatternFinder::sort() {
 
   */
 
-  int vec1  = patterns[n-1];
-  int vec2 = patterns[n-2];
-  vector<int> all = {vec2, vec1, patterns[n-3], patterns[n-5]}; 
-
-  // vec1 and vec2 size = 0?!
-
   printf("--------BEFORE SORT-------- \n"); 
-
-  // this prints out nothing...
-  for (int i = 0; i < all.size(); i++) {
-    for (int j = all.at(i); j < n; j++) {
+ 
+  for (int i = 0; i < patterns.size(); i++) {
+    printf("%d | ", i); 
+    for (int j = patterns.at(i); j < n; j++) {
       printf(" %d ", list[j] );
     }
     printf("\n"); 
   }
 
   printf("\n"); 
-  std::sort(all.begin(), all.end(), compare);
- 
+  std::sort(patterns.begin(), patterns.end(), compare);
+
   printf("\n--------AFTER SORT-------- \n"); 
   
-  // this prints out nothing...
-  for (int i = 0; i < all.size(); i++) {
-    for (int j = all.at(i); j < n; j++) {
+  for (int i = 0; i < patterns.size(); i++) {
+    printf("%d | ", i); 
+    for (int j = patterns.at(i); j < n; j++) {
       printf(" %d ", list[j] );
     }
     printf("\n"); 
   }
 
-  // std::sort(patterns.begin(), patterns.end(), compare);
-
 
 }
+

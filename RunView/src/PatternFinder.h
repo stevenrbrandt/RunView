@@ -10,6 +10,7 @@ public:
   PatternFinder(vector<int>); 
   vector<int> list;
   vector<int> patterns; 
+  vector<int> patternTracker; 
   vector<int> getPatterns(); 
   void buildVector();
   void sort(); 
