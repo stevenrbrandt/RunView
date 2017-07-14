@@ -9,8 +9,8 @@ class PatternFinder {
 public:
   PatternFinder(vector<int>); 
   vector<int> list;
-  vector<vector<int>*> patterns; 
-  vector<vector<int>*> getPatterns(); 
+  vector<int> patterns; 
+  vector<int> getPatterns(); 
   void buildVector();
   void sort(); 
 

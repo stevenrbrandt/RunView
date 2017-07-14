@@ -21,11 +21,21 @@ PatternFinder::PatternFinder(vector<int> v) {
   sort(); 
 }
 
-vector<vector<int>*> PatternFinder::getPatterns() {
+vector<int> PatternFinder::getPatterns() {
   return patterns; 
 }
 
 void PatternFinder::buildVector() {
+  for ( int i=0; i<list.size(); i++ ) patterns.push_back(i);
+
+
+#if 0
+
+  // DMK: The code below doesn't work because "patterns" contains
+  // *pointers* to list, so when the loop below ends the pointers all
+  // point to the same thing, an empty list.  I've put another version
+  // of the loop below that stores copies of the list, and so would work,
+  // but would be very inefficient.
   vector<int>* elm = &list; 
   while (!elm->empty()) {
     patterns.push_back(elm); 
@@ -39,49 +49,56 @@ void PatternFinder::buildVector() {
     */
     elm->pop_back(); 
   } 
+
+  // DMK: This loop stores copies of "list" in "patterns" and so would
+  // work correctly. But it would be slow because of the amount of copying
+  // that needs to be done.  For this code to work patterns must
+  // be declared type vector<vector<int> >.
+  vector<int> elm = list;
+  while (!elm.empty()) {
+    patterns.push_back(elm); 
+    elm.pop_back();
+  }
+  //
+  // DMK: It would work except for one thing: To find repeating
+  // patterns we need to sort the suffixes of list, but the code
+  // immediately above stores prefixes.
+
+
+#endif
 }
 
 void PatternFinder::sort() {
-  auto compare = [&](const vector<int>* a, const vector<int>* b)
+
+  const int n = (int)list.size();
+
+  auto compare = [&](const int a, const int b)
     {
-      int comp = 1; 
-      if (a->size() == b->size()) {
-	for (int i = 0; i < a->size(); i++) {
-	  if (a->at(i) < b->at(i)) {
-	    comp = 1; 
-	    break; 
-	  } else if (b->at(i) < a->at(i)) {
-	    comp = 0;
-	    break; 
-	  }
-	}
+      if ( a == b ) return true;
+
+      if ( a < b ) {
+
+        for (int i = b; i < n; i++) {
+          const int aidx = i - b + a;
+          if ( list[aidx] == list[i] ) continue;
+          return list[aidx] < list[i];
+        }
+        return true;
+
       } else {
-	comp = 1; 
-	if (a->size() < b->size()) {
-	  for (int i = 0; i < a->size(); i++) {
-	    if (a->at(i) < b->at(i)) {
-	      break; 
-	    } else if (b->at(i) < a->at(i)) {
-	      comp = 0;
-	      break; 
-	    } else if (++i == a->size()) {
-	      comp = 1; 
-	    }
-	  } 
-	} else {
-	  for (int i = 0; i < b->size(); i++) {
-	    if (a->at(i) < b->at(i)) {
-	      break; 
-	    } else if (b->at(i) < a->at(i)) {
-	      comp = 0;
-	      break; 
-	    } else if (++i == b->size()) {
-	      comp = 0; 
-	    }
-	  }
-	}
+
+        for (int i = a; i < n; i++) {
+          const int bidx = i - a + b;
+          if ( list[i] < list[bidx] ) {
+            return true;
+          } else if ( list[bidx] < list[i] ) {
+            return false;
+          }
+        }
+        return false;
+
       }
-      return comp;
+      return false; // Unreachable
     };
 
   // Testing 
@@ -103,10 +120,9 @@ void PatternFinder::sort() {
 
   */
 
-  vector<int>* vec1  = patterns.back(); 
-  patterns.pop_back(); 
-  vector<int>* vec2 = patterns.back();
-  vector<vector<int>*> all = {vec2, vec1}; 
+  int vec1  = patterns[n-1];
+  int vec2 = patterns[n-2];
+  vector<int> all = {vec2, vec1, patterns[n-3], patterns[n-5]}; 
 
   // vec1 and vec2 size = 0?!
 
@@ -114,8 +130,8 @@ void PatternFinder::sort() {
 
   // this prints out nothing...
   for (int i = 0; i < all.size(); i++) {
-    for (int j = 0; j < all.at(i)->size(); j++) {
-      printf(" %d ", all.at(i)->at(j));
+    for (int j = all.at(i); j < n; j++) {
+      printf(" %d ", list[j] );
     }
     printf("\n"); 
   }
@@ -127,13 +143,13 @@ void PatternFinder::sort() {
   
   // this prints out nothing...
   for (int i = 0; i < all.size(); i++) {
-    for (int j = 0; j < all.at(i)->size(); j++) {
-      printf(" %d ", all.at(i)->at(j));
+    for (int j = all.at(i); j < n; j++) {
+      printf(" %d ", list[j] );
     }
     printf("\n"); 
   }
-  
+
   // std::sort(patterns.begin(), patterns.end(), compare);
-  
+
 
 }

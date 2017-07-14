@@ -4,7 +4,7 @@
     $('rect').dblclick(function () reset()); 
 
 function reset() {
-    var mySVG = document.getElementsByTagName("svg")[1];
+    var mySVG = document.getElementsByTagName("svg")[2];
     var height = Number(mySVG.getAttribute("width"));
     var width = Number(mySVG.getAttribute("height")); 
     mySVG.setAttribute("viewBox","0 0 "+width+" "+height + "");   
@@ -16,7 +16,7 @@ function highlight(rect) {
     $('.'+clsName).mouseleave( function() {$('.'+clsName).attr("fill", "white"); }); }  
   
 function zoom(rect) {  
-    var mySVG = document.getElementsByTagName("svg")[1];   
+    var mySVG = document.getElementsByTagName("svg")[2];   
     var svgSpace = document.getElementById("background");  
     var clsName = rect.getAttribute("class"); 
     var els = document.getElementsByClassName(clsName);     
