@@ -828,7 +828,8 @@ RV_Data::generate_timeline_simple()
     seg_indices.push_back(s.timer_idx); 
   }
  
-  PatternFinder* pf = new PatternFinder(seg_indices); 
+  vector<int> tester = {1,2,3,4,3,4,5,6,7,8,6,7,8}; 
+  PatternFinder* pf = new PatternFinder(tester); 
  
   /// Write SVG Image of Segments
   //
