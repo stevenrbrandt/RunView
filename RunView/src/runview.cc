@@ -614,120 +614,75 @@ RV_Data::generate_graph_simple()
 
   const int width_char = 1.5 * level_to_pt / font_size;  // Approximate width.
 
-  
-  stack.push_back(&timer_tree); 
-  while (stack.size()) {
-    RV_Timer_Node* const nd = stack.back(); stack.pop_back(); 
+  // Traverse tree again, this time emit a rectangle for each tree node.
+  //
+  stack.push_back(&timer_tree);
+  while ( stack.size() )
+    {
+      RV_Timer_Node* const nd = stack.back();  stack.pop_back();
 
-   const double ht = nd->dur_node_s * s_to_pt;
-   const double top_ypt = nd->pseudo_time_start * s_to_pt;
-    
-   rect( nd->level * level_to_pt, top_ypt, level_to_pt, ht );
-   string name = escapeForXML( nd->name.substr(0,width_char) );
-   
-  const double baselineskip_ypt = font_size * 1.2;
-  const double text_limit_ypt = top_ypt + ht - baselineskip_ypt;
-  const double text_xpt = font_size + nd->level * level_to_pt;
-  double curr_text_ypt = nd->pseudo_time_start * s_to_pt;
-    
-  if (nd->papi_node.filled()){
-    
-    const papi_long n_insn =
-	    max(papi_long(1),nd->papi_node[PAPI_TOT_INS]);
-    const papi_long n_cyc = max(papi_long(1),nd->papi_node.cyc);
-    const double mpki = 1000.0 * nd->papi_node[PAPI_L3_TCM] / n_insn;
-    
-    const papi_long n_cyc_stall = nd->papi_node[PAPI_STL_CCY];
-    const papi_long n_cyc_stall_r = nd->papi_node[PAPI_RES_STL];
-    const papi_long n_cyc_full = nd->papi_node[PAPI_FUL_CCY];
-    
-    if ( curr_text_ypt < text_limit_ypt )
-      fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%s</text>\n",
-  	      text_xpt, curr_text_ypt += baselineskip_ypt,
-  	      name.c_str());
-    
-    
-    if ( curr_text_ypt < text_limit_ypt )
-      fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">L3 %.3f MPKI</text>\n",
-	      text_xpt, curr_text_ypt += baselineskip_ypt,
-	      mpki );
-    if ( curr_text_ypt < text_limit_ypt )
-      fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%.1f IPC</text>\n",
-	      text_xpt, curr_text_ypt += baselineskip_ypt,
-	      double(n_insn) / n_cyc );
-    if ( curr_text_ypt < text_limit_ypt )
-      fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">Stallr %.1f%%</text>\n",
-	      text_xpt, curr_text_ypt += baselineskip_ypt,
-	      100.0 * double(n_cyc_stall_r) / n_cyc );
-    if ( curr_text_ypt < text_limit_ypt )
-      fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">Stall %.1f%%</text>\n",
-	      text_xpt, curr_text_ypt += baselineskip_ypt,
-	      100.0 * double(n_cyc_stall) / n_cyc );
-    if ( curr_text_ypt < text_limit_ypt )
-      fprintf
-	(fh, "<text x=\"%.3f\" y=\"%.3f\">Full %.1f%%</text>\n",
-	 text_xpt, curr_text_ypt += baselineskip_ypt,
-	 100.0 * n_cyc_full / n_cyc );
-    if ( curr_text_ypt < text_limit_ypt )
-      fprintf
-	(fh, "<text x=\"%.3f\" y=\"%.3f\">Fullns %.1f%%</text>\n",
-	 text_xpt, curr_text_ypt += baselineskip_ypt,
-	 100.0 * n_cyc_full / max(papi_long(1),n_cyc-n_cyc_stall) );
-  }
-  
-  for ( auto& pair: nd->children ) stack.push_back(&pair.second);
-  }  
-  
-  // setting up main for drawRectangles function
-   main->percent_op = 1; 
+      const double ht = nd->dur_node_s * s_to_pt;
+      const double top_ypt = nd->pseudo_time_start * s_to_pt;
 
-  // draw rectangle around entire space
-   /*
-   fprintf(fh, "<rect  fill=\"rgb(203, 203, 203)\"  stroke=\"black\" "
-	   "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n", plot_area_left_xpt,  
-	   plot_area_top_ypt, plot_area_wpt -4, plot_area_hpt);
-   */
+      rect( nd->level * level_to_pt, top_ypt, level_to_pt, ht );
+      string name = escapeForXML( nd->name.substr(0,width_char) );
 
-   // Draw root rectangle
-   fprintf(fh, "<rect id=\"%s\" class=\"myrect\" fill=\"rgb(179, 225, 255)\" stroke=\"black\" "
-	   "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n",timer_tree.name.c_str(),
-	   plot_area_left_xpt,  plot_area_top_ypt, level_to_pt, plot_area_hpt);
+      const double baselineskip_ypt = font_size * 1.2;
+      const double text_limit_ypt = top_ypt + ht - baselineskip_ypt;
+      const double text_xpt = font_size + nd->level * level_to_pt;
+      double curr_text_ypt = nd->pseudo_time_start * s_to_pt;
 
-    fprintf(fh, "<text id=\"rootTXT\" class=\"text\" y=\"%.3f\" font-size=\"10\" > \n"
-	    "<tspan class=\"textEl\" x=\"%.3f\"> %s </tspan> \n"
-	    "<tspan class= \"textEl\" x=\"%.3f\" dy=\"10\">%% %.5f </tspan> \n"
-	    "</text> \n",  plot_area_top_ypt+10, plot_area_left_xpt+4, timer_tree.name.c_str(),
-	    plot_area_left_xpt+4, timer_tree.percent_pp);
-   
-   fprintf(fh, "<g id=\"rootD\" > \n");
+      if ( curr_text_ypt < text_limit_ypt )
+        fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%s</text>\n",
+                text_xpt, curr_text_ypt += baselineskip_ypt,
+                name.c_str());
 
-   // Draw rectangles
-   double ta = generate_rect(plot_area_top_ypt, level_to_pt,level_to_pt, 
-			     plot_area_hpt, main, fh); 
+#     ifdef HAVE_PAPI
+      if ( nd->papi_node.filled() )
+        {
+          const papi_long n_insn =
+            max(papi_long(1),nd->papi_node[PAPI_TOT_INS]);
+          const papi_long n_cyc = max(papi_long(1),nd->papi_node.cyc);
+          const double mpki = 1000.0 * nd->papi_node[PAPI_L3_TCM] / n_insn;
 
-   fprintf(fh, "%s", "</g> \n"); 
-   fprintf(fh, "%s", "</svg> \n"); 
-   
+          const papi_long n_cyc_stall = nd->papi_node[PAPI_STL_CCY];
+          const papi_long n_cyc_stall_r = nd->papi_node[PAPI_RES_STL];
+          const papi_long n_cyc_full = nd->papi_node[PAPI_FUL_CCY];
 
-   // Add javascript features from file
-   string fN = "simpleGraphScript.txt";
-   string fileName = getfilepath(fN); 
-   
-   // Open and read from file
-   string line; 
-   std::ifstream scriptFile;
-   scriptFile.open(fileName.c_str(), std::ifstream::in); 
-   if (scriptFile.is_open()) {
-     while (!scriptFile.eof()) {
-       getline(scriptFile, line); 
-       fprintf(fh, "%s \n", line.c_str()); 
-     }
-   }
+          if ( curr_text_ypt < text_limit_ypt )
+            fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">L3 %.3f MPKI</text>\n",
+                    text_xpt, curr_text_ypt += baselineskip_ypt,
+                    mpki );
+          if ( curr_text_ypt < text_limit_ypt )
+            fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%.1f IPC</text>\n",
+                    text_xpt, curr_text_ypt += baselineskip_ypt,
+                    double(n_insn) / n_cyc );
+          if ( curr_text_ypt < text_limit_ypt )
+            fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">Stallr %.1f%%</text>\n",
+                    text_xpt, curr_text_ypt += baselineskip_ypt,
+                    100.0 * double(n_cyc_stall_r) / n_cyc );
+          if ( curr_text_ypt < text_limit_ypt )
+            fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">Stall %.1f%%</text>\n",
+                    text_xpt, curr_text_ypt += baselineskip_ypt,
+                    100.0 * double(n_cyc_stall) / n_cyc );
+          if ( curr_text_ypt < text_limit_ypt )
+            fprintf
+              (fh, "<text x=\"%.3f\" y=\"%.3f\">Full %.1f%%</text>\n",
+               text_xpt, curr_text_ypt += baselineskip_ypt,
+               100.0 * n_cyc_full / n_cyc );
+          if ( curr_text_ypt < text_limit_ypt )
+            fprintf
+              (fh, "<text x=\"%.3f\" y=\"%.3f\">Fullns %.1f%%</text>\n",
+               text_xpt, curr_text_ypt += baselineskip_ypt,
+               100.0 * n_cyc_full / max(papi_long(1),n_cyc-n_cyc_stall) );
+        }
+#     endif
 
-   // Close
-   fprintf(fh, "%s", "</body> \n </head>\n </html>\n");
- 
-   fclose(fh);
+      for ( auto& pair: nd->children ) stack.push_back(&pair.second);
+    }
+
+  fprintf(fh,"%s","</g></svg>\n");
+  fclose(fh);
 }
 
 void
@@ -993,6 +948,7 @@ RV_Data::generate_timeline_simple()
       fprintf(fh, R"--(<text x="%.3f" y="%.3f">%s</text>)--",
               xpt + 0.5*font_size, ypt + font_size, name.c_str() );
 
+#ifdef HAVE_PAPI
       if ( ! s.papi.filled() ) continue;
 
       const double text_xpt = xpt + 0.5 * font_size;
@@ -1035,6 +991,7 @@ RV_Data::generate_timeline_simple()
           (fh, R"--(<text x="%.3f" y="%.3f">Fullns %.1f%%</text>)--",
            text_xpt, curr_text_ypt += baselineskip_ypt,
            100.0 * n_cyc_full / max(papi_long(1),n_cyc-n_cyc_stall) );
+#endif
     }
 
   fprintf(fh,"%s","</g></svg>\n");
