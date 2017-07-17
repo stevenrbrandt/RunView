@@ -51,7 +51,11 @@ public:
       cyc += s.cyc;
       for ( int i=0; i<values.size(); i++ ) values[i] += s.values[i];
     }
-  void accumulate(RV_PAPI_Sample&& at_end, RV_PAPI_Sample& at_start)
+  void accumulate
+  (const RV_PAPI_Sample* at_end, const RV_PAPI_Sample* at_start)
+    { accumulate(*at_end,*at_start); }
+  void accumulate
+  (const RV_PAPI_Sample& at_end, const RV_PAPI_Sample& at_start)
     {
       if ( values.empty() ) values.resize( at_end.values.size() );
       cyc += at_end.cyc - at_start.cyc;
@@ -91,10 +95,12 @@ public:
 
   RV_PAPI_Sample sample_get()
   {
-    RV_PAPI_Sample rv(PAPI_get_real_cyc(),n_events);
+    RV_PAPI_Sample rv(PAPI_get_real_cyc()-cyc_start,n_events);
     PE( PAPI_read(eset, rv.values_ptr()) );
     return rv;
   }
+
+  double cpu_clock_max_hz_get();
 
   int ncallbacks;
   void callback(int eset, void *pc);

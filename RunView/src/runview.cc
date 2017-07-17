@@ -208,6 +208,7 @@ RV_Data::atend()
     {
       fprintf(fh,"Found %d timers.\n", ntimers);
       fprintf(fh,"Found %zd events.\n", rv_ctimers.events.size());
+      fprintf(fh,"Allocated %d papi structures.\n",rv_ctimers.n_papi_samples);
       for ( int i=0; i<nclocks; i++ )
         fprintf(fh,"Clock %d: %s\n",i,CCTK_ClockName(i));
     }
@@ -782,6 +783,7 @@ RV_Data::generate_timeline_simple()
       timer_idx(ti), level(l), start_s(ss), end_s(es){};
     int timer_idx, level;
     double start_s, end_s;
+    RV_PAPI_Sample papi;
   };
   vector<Seg_Info> seg_info;
 
@@ -812,7 +814,9 @@ RV_Data::generate_timeline_simple()
         assert( ev_last->timer_index == idx );
         timer_stack.pop_back();
         seg_info.emplace_back
-          (idx,timer_stack.size(),ev_last->event_time_s,ev.event_time_s);
+          (idx,timer_stack.size(),ev_last->etime_s_get(),ev.etime_s_get());
+        if ( ev_last->have_papi_sample )
+          seg_info.back().papi.accumulate(ev.papi_sample,ev_last->papi_sample);
         break;
 
       case RET_Timer_Reset: break;
@@ -851,8 +855,8 @@ RV_Data::generate_timeline_simple()
   printf("\n\n duration: %.3f \n \nf", duration); 
   //
   // Level to Point
-  const double level_ht_lines = 2;
-  const double level_to_pt = level_ht_lines * baselineskip_pt * 1.7;
+  const double level_ht_lines = 5.7;
+  const double level_to_pt = level_ht_lines * baselineskip_pt;
 
   // Height of a Segment.
   const double seg_hpt = level_to_pt;
@@ -988,6 +992,49 @@ RV_Data::generate_timeline_simple()
       string name = escapeForXML( leaf_name[s.timer_idx].substr(0,width_char) );
       fprintf(fh, R"--(<text x="%.3f" y="%.3f">%s</text>)--",
               xpt + 0.5*font_size, ypt + font_size, name.c_str() );
+
+      if ( ! s.papi.filled() ) continue;
+
+      const double text_xpt = xpt + 0.5 * font_size;
+      const double baselineskip_ypt = font_size * 1.2;
+      const double text_limit_ypt = ypt + level_to_pt;
+      double curr_text_ypt = ypt + font_size;
+
+      const papi_long n_insn =
+        max(papi_long(1),s.papi[PAPI_TOT_INS]);
+      const papi_long n_cyc = max(papi_long(1),s.papi.cyc);
+      const double mpki = 1000.0 * s.papi[PAPI_L3_TCM] / n_insn;
+
+      const papi_long n_cyc_stall = s.papi[PAPI_STL_CCY];
+      const papi_long n_cyc_stall_r = s.papi[PAPI_RES_STL];
+      const papi_long n_cyc_full = s.papi[PAPI_FUL_CCY];
+
+      if ( curr_text_ypt < text_limit_ypt )
+        fprintf(fh, R"--(<text x="%.3f" y="%.3f">L3 %.3f MPKI</text>)--",
+                text_xpt, curr_text_ypt += baselineskip_ypt,
+                mpki );
+      if ( curr_text_ypt < text_limit_ypt )
+        fprintf(fh, R"--(<text x="%.3f" y="%.3f">%.1f IPC</text>)--",
+                text_xpt, curr_text_ypt += baselineskip_ypt,
+                double(n_insn) / n_cyc );
+      if ( curr_text_ypt < text_limit_ypt )
+        fprintf(fh, R"--(<text x="%.3f" y="%.3f">Stallr %.1f%%</text>)--",
+                text_xpt, curr_text_ypt += baselineskip_ypt,
+                100.0 * double(n_cyc_stall_r) / n_cyc );
+      if ( curr_text_ypt < text_limit_ypt )
+        fprintf(fh, R"--(<text x="%.3f" y="%.3f">Stall %.1f%%</text>)--",
+                text_xpt, curr_text_ypt += baselineskip_ypt,
+                100.0 * double(n_cyc_stall) / n_cyc );
+      if ( curr_text_ypt < text_limit_ypt )
+        fprintf
+          (fh, R"--(<text x="%.3f" y="%.3f">Full %.1f%%</text>)--",
+           text_xpt, curr_text_ypt += baselineskip_ypt,
+           100.0 * n_cyc_full / n_cyc );
+      if ( curr_text_ypt < text_limit_ypt )
+        fprintf
+          (fh, R"--(<text x="%.3f" y="%.3f">Fullns %.1f%%</text>)--",
+           text_xpt, curr_text_ypt += baselineskip_ypt,
+           100.0 * n_cyc_full / max(papi_long(1),n_cyc-n_cyc_stall) );
     }
 
   fprintf(fh,"%s","</g></svg>\n");
