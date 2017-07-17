@@ -26,4 +26,12 @@ time_wall_fp()
   return now.tv_sec + ((double)now.tv_nsec) * 1e-9;
 }
 
+inline int64_t
+time_wall_ns()
+{
+  struct timespec now;
+  clock_gettime(CLOCK_REALTIME,&now);
+  return 1000000000 * int64_t(now.tv_sec) + now.tv_nsec;
+}
+
 #endif
