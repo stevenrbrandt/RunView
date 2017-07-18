@@ -15,15 +15,43 @@
 using namespace std; 
 
 // methods 
-PatternFinder::PatternFinder(vector<int> v) {
+PatternFinder::PatternFinder(vector<int> v, int patternLength) {
   list = v; 
   buildVector(); 
   sort(); 
-  getPatterns(); 
+  findPatterns(patternLength); 
+  findRepeatNums(); 
 }
 
 vector<int> PatternFinder::getPatterns() {
-  int patternLength = 3; 
+  return patterns; 
+}
+
+vector<int> PatternFinder::getPatternTracker() {
+  return patternTracker;
+}
+
+vector<int> PatternFinder::getRepeatNums() {
+  return repeats;
+}
+
+void PatternFinder::findRepeatNums() {
+  int n = patternTracker.size(); 
+  if (patternTracker[0] == 0) {repeats.push_back(1); }
+  for (int i = 1; i < n; i++) {
+    repeats.push_back(patternTracker[i] - patternTracker[i-1]); 
+  }
+  
+  
+  printf("\n repeats:  \n" ); 
+  for (int i = 0; i < repeats.size(); i++) {
+    printf("%d | %d \n", i, repeats[i]); 
+    } 
+
+  printf("\n Done!"); 
+}
+
+void PatternFinder::findPatterns(int patternLength) {
   int n = patterns.size(); 
   int tracker = 0; 
   int counter = 0;
@@ -32,12 +60,14 @@ vector<int> PatternFinder::getPatterns() {
     int start = patterns[tracker]; 
     vector<int> currPat; 
     for (int i = start; i < start + patternLength; i++) {
+      if (i > list.size() - 1) {break;}
       currPat.push_back(list[i]); 
     }
 
     while (true) {
       vector<int> comPat;
       for (int i = patterns[tracker+1]; i < patterns[tracker+1]+patternLength; i++) {
+	if (i > list.size() - 1) {break;}
 	comPat.push_back(list[i]); 
       }
       
@@ -53,12 +83,15 @@ vector<int> PatternFinder::getPatterns() {
     if (tracker > n-1) break; 
   }
   
+  /*
   printf("\n Pattern Tracker:  \n" ); 
   for (int i = 0; i < patternTracker.size(); i++) {
     printf("%d | %d \n", i, patternTracker[i]); 
   } 
   
-  return patternTracker; 
+  printf("\n done! \n"); 
+  */
+    
 }
 
 void PatternFinder::buildVector() {
@@ -155,7 +188,7 @@ void PatternFinder::sort() {
   }
 
   */
-
+  /*
   printf("--------BEFORE SORT-------- \n"); 
  
   for (int i = 0; i < patterns.size(); i++) {
@@ -165,10 +198,11 @@ void PatternFinder::sort() {
     }
     printf("\n"); 
   }
-
+  */
   printf("\n"); 
   std::sort(patterns.begin(), patterns.end(), compare);
-
+ 
+  /*
   printf("\n--------AFTER SORT-------- \n"); 
   
   for (int i = 0; i < patterns.size(); i++) {
@@ -178,7 +212,7 @@ void PatternFinder::sort() {
     }
     printf("\n"); 
   }
-
-
+  */
+  
 }
 
