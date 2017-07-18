@@ -348,21 +348,42 @@ RV_Data::generate_rect(double y, double w, double scaler,
       
 
       fill_color = "rgb(" + red +"," +green+"," + blue + ")";
-    }
+    } 
+
+  
 
   // Drawing rectangle
   fprintf(fh, "<rect class=\"myrect\" id=\"%d\" fill=\"%s\" stroke=\"black\" x=\"%.3f\" "
 	  "y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" /> \n ", 
 	  name, fill_color.c_str(), x, y, w, h);
 
-  // Calculating radius based on stall & rectangle width:: EXCEPT THIS DOESN'T WORK
-  /*
-  double radius = sqrt((stall/100) * (w*h) * (4* atan(1)));
-  
+  // Calculating and drawing bubbles based on stall & rectangle width
+  double bubble_total_radius = sqrt((stall/1000) * (w*h) * (4*atan(1)));
 
-  fprintf(fh, "<circle class=\"circle\" cx=\"%d\" cy=\"%d\" r=\"%.5f\" fill=\"white\" "
-	  "stroke=\"black\" /> \n", (int)( x+w/2), (int) (y+h/2), radius);
-  */
+  while (bubble_total_radius != 0) {
+    // establishing radius
+    double radius; 
+    if ((bubble_total_radius > (w / 2)) || (bubble_total_radius > (h/2))) {
+      if (w > h) {radius = h/2;}
+      else {radius = w/2;}
+      bubble_total_radius = bubble_total_radius - radius; 
+    } else {
+      radius = bubble_total_radius;
+      bubble_total_radius = 0; 
+    }
+
+    // establishing x and y coordinates
+    double circle_x = rand()%(int)((x+w)-x+1) + x; 
+    if ((circle_x + radius) > (x+w)) {circle_x = (x+w) - radius;}
+    else if (circle_x - radius < x) {circle_x = x + radius;}
+    double circle_y = rand()%(int)((y+h)-y+1) + y; 
+    if ((circle_y + radius) > (y+h)) {circle_y = (y+h) - radius;}
+    else if (circle_y - radius < y) {circle_y = y + radius;}
+
+
+    fprintf(fh, "<circle class=\"circle\" cx=\"%.3f\" cy=\"%.3f\" r=\"%.5f\" fill=\"white\" "
+	    "stroke=\"black\" /> \n", circle_x, circle_y, radius);
+  }
 
   // printing the text
   if ( h >= 20 ) {
@@ -614,76 +635,124 @@ RV_Data::generate_graph_simple()
 
   const int width_char = 1.5 * level_to_pt / font_size;  // Approximate width.
 
-  // Traverse tree again, this time emit a rectangle for each tree node.
-  //
+  
   stack.push_back(&timer_tree);
-  while ( stack.size() )
-    {
-      RV_Timer_Node* const nd = stack.back();  stack.pop_back();
+  /* 
+  while (stack.size()) {
+    RV_Timer_Node* const nd = stack.back(); stack.pop_back(); 
 
-      const double ht = nd->dur_node_s * s_to_pt;
-      const double top_ypt = nd->pseudo_time_start * s_to_pt;
+   const double ht = nd->dur_node_s * s_to_pt;
+   const double top_ypt = nd->pseudo_time_start * s_to_pt;
+    
+   rect( nd->level * level_to_pt, top_ypt, level_to_pt, ht );
+   string name = escapeForXML( nd->name.substr(0,width_char) );
+   
+  const double baselineskip_ypt = font_size * 1.2;
+  const double text_limit_ypt = top_ypt + ht - baselineskip_ypt;
+  const double text_xpt = font_size + nd->level * level_to_pt;
+  double curr_text_ypt = nd->pseudo_time_start * s_to_pt;
+    
+  
+  if (nd->papi_node.filled()){
+    
+    const papi_long n_insn =
+	    max(papi_long(1),nd->papi_node[PAPI_TOT_INS]);
+    const papi_long n_cyc = max(papi_long(1),nd->papi_node.cyc);
+    const double mpki = 1000.0 * nd->papi_node[PAPI_L3_TCM] / n_insn;
+    
+    const papi_long n_cyc_stall = nd->papi_node[PAPI_STL_CCY];
+    const papi_long n_cyc_stall_r = nd->papi_node[PAPI_RES_STL];
+    const papi_long n_cyc_full = nd->papi_node[PAPI_FUL_CCY];
+    
+    if ( curr_text_ypt < text_limit_ypt )
+      fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%s</text>\n",
+  	      text_xpt, curr_text_ypt += baselineskip_ypt,
+  	      name.c_str());
+    
+    
+    if ( curr_text_ypt < text_limit_ypt )
+      fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">L3 %.3f MPKI</text>\n",
+	      text_xpt, curr_text_ypt += baselineskip_ypt,
+	      mpki );
+    if ( curr_text_ypt < text_limit_ypt )
+      fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%.1f IPC</text>\n",
+	      text_xpt, curr_text_ypt += baselineskip_ypt,
+	      double(n_insn) / n_cyc );
+    if ( curr_text_ypt < text_limit_ypt )
+      fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">Stallr %.1f%%</text>\n",
+	      text_xpt, curr_text_ypt += baselineskip_ypt,
+	      100.0 * double(n_cyc_stall_r) / n_cyc );
+    if ( curr_text_ypt < text_limit_ypt )
+      fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">Stall %.1f%%</text>\n",
+	      text_xpt, curr_text_ypt += baselineskip_ypt,
+	      100.0 * double(n_cyc_stall) / n_cyc );
+    if ( curr_text_ypt < text_limit_ypt )
+      fprintf
+	(fh, "<text x=\"%.3f\" y=\"%.3f\">Full %.1f%%</text>\n",
+	 text_xpt, curr_text_ypt += baselineskip_ypt,
+	 100.0 * n_cyc_full / n_cyc );
+    if ( curr_text_ypt < text_limit_ypt )
+      fprintf
+	(fh, "<text x=\"%.3f\" y=\"%.3f\">Fullns %.1f%%</text>\n",
+	 text_xpt, curr_text_ypt += baselineskip_ypt,
+	 100.0 * n_cyc_full / max(papi_long(1),n_cyc-n_cyc_stall) );
+  }
+  
+  for ( auto& pair: nd->children ) stack.push_back(&pair.second);
+  }  
+  */
 
-      rect( nd->level * level_to_pt, top_ypt, level_to_pt, ht );
-      string name = escapeForXML( nd->name.substr(0,width_char) );
+  // setting up main for drawRectangles function
+  main->percent_op = 1; 
+  
+  // draw rectangle around entire space
+  
+  fprintf(fh, "<rect  fill=\"rgb(203, 203, 203)\"  stroke=\"black\" "
+	  "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n", plot_area_left_xpt,  
+	  plot_area_top_ypt, plot_area_wpt -4, plot_area_hpt);
+  
+  
+  // Draw root rectangle
+  fprintf(fh, "<rect id=\"%s\" class=\"myrect\" fill=\"rgb(179, 225, 255)\" stroke=\"black\" "
+	  "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n",timer_tree.name.c_str(),
+	  plot_area_left_xpt,  plot_area_top_ypt, level_to_pt, plot_area_hpt);
+  
+  fprintf(fh, "<text id=\"rootTXT\" class=\"text\" y=\"%.3f\" font-size=\"10\" > \n"
+	  "<tspan class=\"textEl\" x=\"%.3f\"> %s </tspan> \n"
+	  "<tspan class= \"textEl\" x=\"%.3f\" dy=\"10\">%% %.5f </tspan> \n"
+	  "</text> \n",  plot_area_top_ypt+10, plot_area_left_xpt+4, timer_tree.name.c_str(),
+	  plot_area_left_xpt+4, timer_tree.percent_pp);
+  
+  fprintf(fh, "<g id=\"rootD\" > \n");
+  
+  // Draw rectangles
+  double ta = generate_rect(plot_area_top_ypt, level_to_pt,level_to_pt, 
+			    plot_area_hpt, main, fh); 
+  
+  fprintf(fh, "%s", "</g> \n"); 
+  fprintf(fh, "%s", "</svg> \n"); 
+  
+   
+   // Add javascript features from file
+   string fN = "simpleGraphScript.txt";
+   string fileName = getfilepath(fN); 
+   
+   // Open and read from file
+   string line; 
+   std::ifstream scriptFile;
+   scriptFile.open(fileName.c_str(), std::ifstream::in); 
+   if (scriptFile.is_open()) {
+     while (!scriptFile.eof()) {
+       getline(scriptFile, line); 
+       fprintf(fh, "%s \n", line.c_str()); 
+     }
+   }
 
-      const double baselineskip_ypt = font_size * 1.2;
-      const double text_limit_ypt = top_ypt + ht - baselineskip_ypt;
-      const double text_xpt = font_size + nd->level * level_to_pt;
-      double curr_text_ypt = nd->pseudo_time_start * s_to_pt;
-
-      if ( curr_text_ypt < text_limit_ypt )
-        fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%s</text>\n",
-                text_xpt, curr_text_ypt += baselineskip_ypt,
-                name.c_str());
-
-#     ifdef HAVE_PAPI
-      if ( nd->papi_node.filled() )
-        {
-          const papi_long n_insn =
-            max(papi_long(1),nd->papi_node[PAPI_TOT_INS]);
-          const papi_long n_cyc = max(papi_long(1),nd->papi_node.cyc);
-          const double mpki = 1000.0 * nd->papi_node[PAPI_L3_TCM] / n_insn;
-
-          const papi_long n_cyc_stall = nd->papi_node[PAPI_STL_CCY];
-          const papi_long n_cyc_stall_r = nd->papi_node[PAPI_RES_STL];
-          const papi_long n_cyc_full = nd->papi_node[PAPI_FUL_CCY];
-
-          if ( curr_text_ypt < text_limit_ypt )
-            fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">L3 %.3f MPKI</text>\n",
-                    text_xpt, curr_text_ypt += baselineskip_ypt,
-                    mpki );
-          if ( curr_text_ypt < text_limit_ypt )
-            fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%.1f IPC</text>\n",
-                    text_xpt, curr_text_ypt += baselineskip_ypt,
-                    double(n_insn) / n_cyc );
-          if ( curr_text_ypt < text_limit_ypt )
-            fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">Stallr %.1f%%</text>\n",
-                    text_xpt, curr_text_ypt += baselineskip_ypt,
-                    100.0 * double(n_cyc_stall_r) / n_cyc );
-          if ( curr_text_ypt < text_limit_ypt )
-            fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">Stall %.1f%%</text>\n",
-                    text_xpt, curr_text_ypt += baselineskip_ypt,
-                    100.0 * double(n_cyc_stall) / n_cyc );
-          if ( curr_text_ypt < text_limit_ypt )
-            fprintf
-              (fh, "<text x=\"%.3f\" y=\"%.3f\">Full %.1f%%</text>\n",
-               text_xpt, curr_text_ypt += baselineskip_ypt,
-               100.0 * n_cyc_full / n_cyc );
-          if ( curr_text_ypt < text_limit_ypt )
-            fprintf
-              (fh, "<text x=\"%.3f\" y=\"%.3f\">Fullns %.1f%%</text>\n",
-               text_xpt, curr_text_ypt += baselineskip_ypt,
-               100.0 * n_cyc_full / max(papi_long(1),n_cyc-n_cyc_stall) );
-        }
-#     endif
-
-      for ( auto& pair: nd->children ) stack.push_back(&pair.second);
-    }
-
-  fprintf(fh,"%s","</g></svg>\n");
-  fclose(fh);
-}
+   // Close
+   fprintf(fh, "%s", "</body> \n </head>\n </html>\n");
+ 
+   fclose(fh);
+  }
 
 void
 RV_Data::generate_timeline_simple()
@@ -780,16 +849,6 @@ RV_Data::generate_timeline_simple()
       }
     }
 
-  
-  // Finding patterns 
-  vector<int> seg_indices; 
-  for (auto& s:seg_info) {
-    seg_indices.push_back(s.timer_idx); 
-  }
- 
-  vector<int> tester = {1,2,3,4,3,4,5,6,7,8,6,7,8}; 
-  PatternFinder* pf = new PatternFinder(tester); 
- 
   /// Write SVG Image of Segments
   //
 
@@ -810,7 +869,7 @@ RV_Data::generate_timeline_simple()
   printf("\n\n duration: %.3f \n \nf", duration); 
   //
   // Level to Point
-  const double level_ht_lines = 5.7;
+  const double level_ht_lines = 2;
   const double level_to_pt = level_ht_lines * baselineskip_pt;
 
   // Height of a Segment.
@@ -818,11 +877,8 @@ RV_Data::generate_timeline_simple()
 
   // Plot Area (area holding segments) Height
   //
-  const double plot_area_hpt = max_level * level_to_pt;
+  const double plot_area_hpt = max_level * level_to_pt * 2;
 
-  // Note: Currently image only contains plot. Later, add at least an
-  // x-axis scale showing time.
-  //
   const double image_wpt = plot_area_wpt;
   const double image_hpt = plot_area_hpt;
 
@@ -922,8 +978,23 @@ RV_Data::generate_timeline_simple()
 
 
 
+
   // Generate SVG for individual segments.
   // Also tracking for pattern recognition
+
+   // Finding patterns 
+  vector<int> seg_indices; 
+  for (auto& s:seg_info) {
+    seg_indices.push_back(s.timer_idx); 
+  }
+ 
+  // vector<int> tester = {1,2,3,4,3,4,5,6,7,8,6,7,8}; 
+  PatternFinder* pf = new PatternFinder(seg_indices, 30);
+  vector<int> patterns = pf->getPatterns(); 
+  vector<int> patternTracker = pf->getPatternTracker();
+  vector<int> repeats = pf->getRepeatNums(); 
+ 
+
   vector<int> events; 
 
   for ( auto& s: seg_info )
@@ -934,9 +1005,9 @@ RV_Data::generate_timeline_simple()
 
       string clsName = "timer-" + to_string(s.timer_idx); 
 
-      fprintf(fh, "<rect class=\"%s\" id=\"%s \" fill=\"white\" stroke=\"black\" "
+      fprintf(fh, "<rect class=\"%s\" fill=\"white\" stroke=\"black\" "
               "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n", 
-	      clsName.c_str(), leaf_name[s.timer_idx].c_str(), xpt, ypt, wpt, seg_hpt);
+	      clsName.c_str(), xpt, ypt, wpt, seg_hpt);
 
       // Estimate width assuming that character width is font_size/1.2.
       const int width_char = 1.2 * wpt / font_size;
@@ -992,6 +1063,29 @@ RV_Data::generate_timeline_simple()
            text_xpt, curr_text_ypt += baselineskip_ypt,
            100.0 * n_cyc_full / max(papi_long(1),n_cyc-n_cyc_stall) );
 #endif
+    }
+
+  // traverse a second time for patterns
+  for ( auto& s: seg_info )
+    {
+      const double xpt = s.start_s * s_to_pt;
+      const double ypt = s.level * level_to_pt * max_level;
+      const double wpt = ( s.end_s - s.start_s ) * s_to_pt;
+      
+      string clsName = "timer-" + to_string(s.timer_idx); 
+      string name1 = leaf_name[s.timer_idx] + "B"; 
+      
+      fprintf(fh, "<rect class=\"%s\" fill=\"white\" stroke=\"black\" "
+              "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n", 
+	      clsName.c_str(), xpt, ypt, wpt, seg_hpt);
+      
+      // Estimate width assuming that character width is font_size/1.2.
+      const int width_char = 1.2 * wpt / font_size;
+      const string name2 = escapeForXML( leaf_name[s.timer_idx].substr(0,width_char) );
+      
+      if ( width_char < 2 ) continue;
+      fprintf(fh, R"--(<text x="%.3f" y="%.3f">%s</text>)--",
+              xpt + 0.5*font_size, ypt + font_size, name2.c_str() );
     }
 
   fprintf(fh,"%s","</g></svg>\n");
