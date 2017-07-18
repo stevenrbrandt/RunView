@@ -316,10 +316,10 @@ RV_Data::generate_rect(double y, double w, double scaler,
   string blue = "50";
 
   // Declaring values for drawing
-  double mpkiC; 
-  double full; 
-  double fullns; 
-  double stall; 
+  double __attribute__((unused)) mpkiC;
+  double full = 0;
+  double fullns = 0;
+  double stall = 0;
 
   // Color
   string fill_color = "rgb(179, 225, 255)"; 
@@ -332,7 +332,6 @@ RV_Data::generate_rect(double y, double w, double scaler,
       const double mpki = 1000.0 * curr->papi_node[PAPI_L3_TCM] / n_insn;
       
       const papi_long n_cyc_stall = curr->papi_node[PAPI_STL_CCY];
-      const papi_long n_cyc_stall_r = curr->papi_node[PAPI_RES_STL];
       const papi_long n_cyc_full = curr->papi_node[PAPI_FUL_CCY];
 	
       // Scaling colors based on full and fullns :: EXCEPT IT DOES NOT, CHECK IT OUT
@@ -402,7 +401,7 @@ RV_Data::generate_rect(double y, double w, double scaler,
 	    "<tspan class=\"textEl\" x=\"0\" dy=\"10\">%%Stall: %.3f </tspan> \n" 
 	    "<tspan class=\"textEl\" x=\"0\" dy=\"10\">%%Full: %.3f </tspan> \n" 
 	    "<tspan class=\"textEl\" x=\"0\" dy=\"10\">%%Fullns: %.3f </tspan> \n" 
-	    "</text> \n", tName.c_str(), y+10, x+4, pName.c_str(), curr->percent_pp*100, 
+	    "</text> \n", tName.c_str(), pName.c_str(), curr->percent_pp*100, 
 	    stall, full, fullns);
   }
 
@@ -550,11 +549,6 @@ RV_Data::generate_graph_simple()
   fprintf(fh,"<g id=\"all\" font-size=\"%.3f\" font-family=\"sans-serif\">\n",
           font_size);
 
-  auto rect = [&](double x, double y, double w, double h)
-    { fprintf(fh, R"--(<rect fill="none" stroke="black"
-              x="%.3f" y="%.3f" width="%.3f" height="%.3f" />)--",
-              x, y, w, h); };
-
   // Emit a box around the entire plot area.
   // rect( plot_area_left_xpt, plot_area_top_ypt, plot_area_wpt-4, plot_area_hpt);
 
@@ -627,80 +621,10 @@ RV_Data::generate_graph_simple()
 
   // Compute scale factors
   //
-  // Seconds to points.
-  const double s_to_pt = plot_area_hpt / max_time;
-  //
   // Level to points.
   const double level_to_pt = plot_area_wpt / ( max_level + 1 );
 
-  const int width_char = 1.5 * level_to_pt / font_size;  // Approximate width.
-
-  
   stack.push_back(&timer_tree);
-  /* 
-  while (stack.size()) {
-    RV_Timer_Node* const nd = stack.back(); stack.pop_back(); 
-
-   const double ht = nd->dur_node_s * s_to_pt;
-   const double top_ypt = nd->pseudo_time_start * s_to_pt;
-    
-   rect( nd->level * level_to_pt, top_ypt, level_to_pt, ht );
-   string name = escapeForXML( nd->name.substr(0,width_char) );
-   
-  const double baselineskip_ypt = font_size * 1.2;
-  const double text_limit_ypt = top_ypt + ht - baselineskip_ypt;
-  const double text_xpt = font_size + nd->level * level_to_pt;
-  double curr_text_ypt = nd->pseudo_time_start * s_to_pt;
-    
-  
-  if (nd->papi_node.filled()){
-    
-    const papi_long n_insn =
-	    max(papi_long(1),nd->papi_node[PAPI_TOT_INS]);
-    const papi_long n_cyc = max(papi_long(1),nd->papi_node.cyc);
-    const double mpki = 1000.0 * nd->papi_node[PAPI_L3_TCM] / n_insn;
-    
-    const papi_long n_cyc_stall = nd->papi_node[PAPI_STL_CCY];
-    const papi_long n_cyc_stall_r = nd->papi_node[PAPI_RES_STL];
-    const papi_long n_cyc_full = nd->papi_node[PAPI_FUL_CCY];
-    
-    if ( curr_text_ypt < text_limit_ypt )
-      fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%s</text>\n",
-  	      text_xpt, curr_text_ypt += baselineskip_ypt,
-  	      name.c_str());
-    
-    
-    if ( curr_text_ypt < text_limit_ypt )
-      fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">L3 %.3f MPKI</text>\n",
-	      text_xpt, curr_text_ypt += baselineskip_ypt,
-	      mpki );
-    if ( curr_text_ypt < text_limit_ypt )
-      fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">%.1f IPC</text>\n",
-	      text_xpt, curr_text_ypt += baselineskip_ypt,
-	      double(n_insn) / n_cyc );
-    if ( curr_text_ypt < text_limit_ypt )
-      fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">Stallr %.1f%%</text>\n",
-	      text_xpt, curr_text_ypt += baselineskip_ypt,
-	      100.0 * double(n_cyc_stall_r) / n_cyc );
-    if ( curr_text_ypt < text_limit_ypt )
-      fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">Stall %.1f%%</text>\n",
-	      text_xpt, curr_text_ypt += baselineskip_ypt,
-	      100.0 * double(n_cyc_stall) / n_cyc );
-    if ( curr_text_ypt < text_limit_ypt )
-      fprintf
-	(fh, "<text x=\"%.3f\" y=\"%.3f\">Full %.1f%%</text>\n",
-	 text_xpt, curr_text_ypt += baselineskip_ypt,
-	 100.0 * n_cyc_full / n_cyc );
-    if ( curr_text_ypt < text_limit_ypt )
-      fprintf
-	(fh, "<text x=\"%.3f\" y=\"%.3f\">Fullns %.1f%%</text>\n",
-	 text_xpt, curr_text_ypt += baselineskip_ypt,
-	 100.0 * n_cyc_full / max(papi_long(1),n_cyc-n_cyc_stall) );
-  }
-  
-  for ( auto& pair: nd->children ) stack.push_back(&pair.second);
-  }  
-  */
 
   // setting up main for drawRectangles function
   main->percent_op = 1; 
@@ -726,8 +650,8 @@ RV_Data::generate_graph_simple()
   fprintf(fh, "<g id=\"rootD\" > \n");
   
   // Draw rectangles
-  double ta = generate_rect(plot_area_top_ypt, level_to_pt,level_to_pt, 
-			    plot_area_hpt, main, fh); 
+  generate_rect(plot_area_top_ypt, level_to_pt,level_to_pt,
+                plot_area_hpt, main, fh);
   
   fprintf(fh, "%s", "</g> \n"); 
   fprintf(fh, "%s", "</svg> \n"); 
@@ -913,7 +837,6 @@ RV_Data::generate_timeline_simple()
 
   // Drawing the timeline
   double secMarks = floor (duration); 
-  double endSpace = duration - secMarks; 
   double spaceBtwTicks = ((image_wpt * secMarks) / duration) / secMarks; 
   
   fprintf(fh,"<svg width=\"%.3fpt\" height=\"35pt\"\n"
