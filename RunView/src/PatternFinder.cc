@@ -42,13 +42,13 @@ void PatternFinder::findRepeatNums() {
     repeats.push_back(patternTracker[i] - patternTracker[i-1]); 
   }
   
-  /*
+  
   printf("\n repeats:  \n" ); 
   for (int i = 0; i < repeats.size(); i++) {
     printf("%d | %d \n", i, repeats[i]); 
     } 
-  */
-  printf("\n Done!"); 
+  
+  printf("\n Repeats size: %d!", repeats.size()); 
 }
 
 void PatternFinder::findPatterns(int patternLength) {
@@ -83,14 +83,14 @@ void PatternFinder::findPatterns(int patternLength) {
     if (tracker > n-1) break; 
   }
   
-  /*
+  
   printf("\n Pattern Tracker:  \n" ); 
   for (int i = 0; i < patternTracker.size(); i++) {
     printf("%d | %d \n", i, patternTracker[i]); 
   } 
   
-  printf("\n done! \n"); 
-  */
+  printf("\n Pattern Tracker size: %d \n", patternTracker.size()); 
+  
     
 }
 
@@ -213,6 +213,7 @@ void PatternFinder::sort() {
     printf("\n"); 
   }
   */
+  printf("\n Patterns size: %d", patterns.size()); 
   
 }
 
