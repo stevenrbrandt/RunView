@@ -42,12 +42,12 @@ void PatternFinder::findRepeatNums() {
     repeats.push_back(patternTracker[i] - patternTracker[i-1]); 
   }
   
-  
+  /*
   printf("\n repeats:  \n" ); 
   for (int i = 0; i < repeats.size(); i++) {
     printf("%d | %d \n", i, repeats[i]); 
     } 
-
+  */
   printf("\n Done!"); 
 }
 

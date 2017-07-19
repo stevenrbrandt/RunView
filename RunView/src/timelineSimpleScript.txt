@@ -10,10 +10,11 @@ function reset() {
     mySVG.setAttribute("viewBox","0 0 "+width+" "+height + "");   
     }
 
-function highlight(rect) {    
+function highlight(rect) { 
+    var opa = rect.getAttribute("fill-opacity");    
     var clsName = rect.getAttribute('class');    
-    $('.'+clsName).attr("fill", "rgb(255,145, 48)");    
-    $('.'+clsName).mouseleave( function() {$('.'+clsName).attr("fill", "white"); }); }  
+    $('.'+clsName).attr("fill-opacity", ".5");    
+    $('.'+clsName).mouseleave( function() {$('.'+clsName).attr("fill-opacity", opa); }); }  
   
 function zoom(rect) {  
     var mySVG = document.getElementsByTagName("svg")[2];   
