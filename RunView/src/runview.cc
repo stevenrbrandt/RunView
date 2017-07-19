@@ -806,7 +806,7 @@ RV_Data::generate_timeline_simple()
   printf("\n\n duration: %.3f \n \nf", duration); 
   //
   // Level to Point
-  const double level_ht_lines = 2;
+  const double level_ht_lines = 3.5; //5.7
   const double level_to_pt = level_ht_lines * baselineskip_pt;
 
   // Height of a Segment.
@@ -837,7 +837,7 @@ RV_Data::generate_timeline_simple()
   string zuko = "yes";
 
   fprintf(fh, "<g font-size=\"10.000\" font-family=\"sans-serif\" stroke-width=\"0.2\"> \n"
-	  " <rect id=\"infoBoxBackground\" fill=\"rgb(179, 225, 255)\" "
+	  " <rect id=\"infoBoxBackground\" fill=\"rgb(125, 175, 255)\" "
 	  "stroke=\"none\" x=\"0\" y=\"0\" width=\"%.3fpt\" height=\"100pt\" /> \n"
 	  "<text id=\"infoText\" class=\"text\" y=\"15.000\" font-size=\"10\"> \n"
 	  "<tspan class=\"textEl\" x=\"9.000\" font-size=\"15\" >Summary of Execution:  </tspan> \n "
@@ -905,8 +905,8 @@ RV_Data::generate_timeline_simple()
   // Make main rectangle
   fprintf
     (fh,
-     "<rect class= \"main\" x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" "
-     "fill=\"white\" stroke=\"black\"/>\n",
+     "<rect class= \"main\" x=\"%.3f\" y=\"%.3f\" fill=\"rgb(179, 225, 255)\" width=\"%.3f\" height=\"%.3f\" "
+     "stroke=\"white\" stroke-width=\".75\"/>\n",
      0.0, 0.0, plot_area_wpt, seg_hpt);
 
   fprintf(fh, "<text x=\"%.3f\" y=\"%.3f\">Main</text>\n",
@@ -941,6 +941,12 @@ RV_Data::generate_timeline_simple()
 
       string clsName = "timer-" + to_string(s.timer_idx); 
 
+      string fill_color = "rgb(179, 225, 255)"; 
+
+      fprintf(fh, "<rect class=\"%s\" fill=\"%s\" stroke=\"white\" stroke-width=\".75\" "
+	      "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n", 
+	      clsName.c_str(), fill_color.c_str(), xpt, ypt, wpt, seg_hpt);
+
       // Estimate width assuming that character width is font_size/1.2.
       const int width_char = 1.2 * wpt / font_size;
       const string name = escapeForXML( leaf_name[s.timer_idx].substr(0,width_char) );
@@ -950,10 +956,12 @@ RV_Data::generate_timeline_simple()
       string name = escapeForXML( leaf_name[s.timer_idx].substr(0,width_char) );
       fprintf(fh, R"--(<text x="%.3f" y="%.3f">%s</text>)--",
               xpt + 0.5*font_size, ypt + font_size, name.c_str() );
-
+      
       // Declaring colors
-      string fill_color = "white"; 
-
+      string red;
+      string green; 
+      string blue = "50"; 
+ 
 #ifdef HAVE_PAPI
       if ( ! s.papi.filled() ) continue; {
       const double text_xpt = xpt + 0.5 * font_size;
@@ -970,8 +978,57 @@ RV_Data::generate_timeline_simple()
 	const papi_long n_cyc_stall_r = s.papi[PAPI_RES_STL];
 	const papi_long n_cyc_full = s.papi[PAPI_FUL_CCY];
 	
-	fill_color = "red"; 
+	double fullns = 100.0 * n_cyc_full / max(papi_long(1),n_cyc-n_cyc_stall);
+	double full = 100.0 * n_cyc_full / n_cyc;
+	double mpkiC = mpki; 
+	double stall =  100.00 * double(n_cyc_stall) / n_cyc;
+	
+	int r = abs(255*round(full) / 100 - 255);
+	int g = (255 * round(fullns)) / 100;
+	green = to_string(g);
+	red = to_string(r);
+
+	fill_color = "rgb(" + red +"," +green+"," + blue + ")";
 		
+	fprintf(fh, "<rect class=\"%s\" fill=\"%s\" stroke=\"white\" stroke-width=\".75\" "
+		"x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n", 
+		clsName.c_str(), fill_color.c_str(), xpt, ypt, wpt, seg_hpt);
+
+	// Calculating and drawing bubbles based on stall & rectangle width
+	if (wpt > 10) {
+	  double bubble_total_radius = sqrt((stall/1000) * (wpt*seg_hpt) * (4*atan(1)));
+	  
+	  while (bubble_total_radius != 0) {
+	    // establishing radius
+	    double radius; 
+	    if ((bubble_total_radius > (wpt / 2)) || (bubble_total_radius > (seg_hpt/2))) {
+	      if (wpt > seg_hpt) {radius = seg_hpt/3;}
+	      else {radius = seg_hpt/3;}
+	      bubble_total_radius = bubble_total_radius - radius; 
+	    } else {
+	      radius = bubble_total_radius;
+	      bubble_total_radius = 0; 
+	    }
+	    
+	    // establishing x and y coordinates
+	    double circle_x = rand()%(int)((xpt+wpt)-xpt+1) + xpt; 
+	    if ((circle_x + radius) > (xpt+wpt)) {circle_x = (xpt+wpt) - radius;}
+	    else if (circle_x - radius < xpt) {circle_x = xpt + radius;}
+	    double circle_y = rand()%(int)((ypt+seg_hpt)-(ypt)+1) + (ypt); 
+	    if ((circle_y + radius) > (ypt+seg_hpt)) {circle_y = (ypt+seg_hpt) - radius;}
+	    else if (circle_y - radius < (ypt)) {circle_y = (ypt) + radius;}
+      
+      
+	    fprintf(fh, "<circle class=\"circleCls\" cx=\"%.3f\" cy=\"%.3f\" r=\"%.5f\" fill=\"white\" "
+		    "stroke=\"black\" /> \n", circle_x, circle_y, radius);
+	  }
+	}
+
+	if ( width_char < 2 ) continue;
+	fprintf(fh, R"--(<text x="%.3f" y="%.3f">%s</text>)--",
+		xpt + 0.5*font_size, ypt + font_size, name.c_str() );
+	
+	/*
 	if ( curr_text_ypt < text_limit_ypt )
 	  fprintf(fh, R"--(<text x="%.3f" y="%.3f">L3 %.3f MPKI</text>)--",
 		  text_xpt, curr_text_ypt += baselineskip_ypt,
@@ -984,6 +1041,8 @@ RV_Data::generate_timeline_simple()
 	  fprintf(fh, R"--(<text x="%.3f" y="%.3f">Stallr %.1f%%</text>)--",
 		  text_xpt, curr_text_ypt += baselineskip_ypt,
 		  100.0 * double(n_cyc_stall_r) / n_cyc );
+	*/
+
 	if ( curr_text_ypt < text_limit_ypt )
         fprintf(fh, R"--(<text x="%.3f" y="%.3f">Stall %.1f%%</text>)--",
                 text_xpt, curr_text_ypt += baselineskip_ypt,
@@ -1001,20 +1060,18 @@ RV_Data::generate_timeline_simple()
 
       }
 #endif
-      fprintf(fh, "<rect class=\"%s\" fill=\"%s\" stroke=\"black\" "
-	      "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n", 
-	      clsName.c_str(), fill_color.c_str(), xpt, ypt, wpt, seg_hpt);
-      
+
     }
 
-  // traverse a second time for patterns:: HAVE NOT DONE YET
+  // traverse a second time for patterns:
   for ( auto& s: seg_info )
     {
+      
       const double xpt = s.start_s * s_to_pt;
       const double ypt = s.level * level_to_pt + (level_to_pt * max_level);
       const double wpt = ( s.end_s - s.start_s ) * s_to_pt;
       
-      string clsName = "timer-" + to_string(s.timer_idx); 
+      string clsName = "timer-" + to_string(s.timer_idx) + "B"; 
       string name1 = leaf_name[s.timer_idx] + "B"; 
       
       fprintf(fh, "<rect class=\"%s\" fill=\"white\" stroke=\"black\" "
