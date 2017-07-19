@@ -918,19 +918,6 @@ RV_Data::generate_timeline_simple()
   // Generate SVG for individual segments.
   // Also tracking for pattern recognition
 
-   // Finding patterns 
-  vector<int> seg_indices; 
-  for (auto& s:seg_info) {
-    seg_indices.push_back(s.timer_idx); 
-  }
- 
-  // vector<int> tester = {1,2,3,4,3,4,5,6,7,8,6,7,8}; 
-  PatternFinder* pf = new PatternFinder(seg_indices, 30);
-  vector<int> patterns = pf->getPatterns(); 
-  vector<int> patternTracker = pf->getPatternTracker();
-  vector<int> repeats = pf->getRepeatNums(); 
- 
-
   vector<int> events; 
 
   for ( auto& s: seg_info )
@@ -951,9 +938,7 @@ RV_Data::generate_timeline_simple()
       const int width_char = 1.2 * wpt / font_size;
       const string name = escapeForXML( leaf_name[s.timer_idx].substr(0,width_char) );
 
-      if ( width_char < 2 ) continue;
-
-      string name = escapeForXML( leaf_name[s.timer_idx].substr(0,width_char) );
+      if ( width_char > 2 ) 
       fprintf(fh, R"--(<text x="%.3f" y="%.3f">%s</text>)--",
               xpt + 0.5*font_size, ypt + font_size, name.c_str() );
       
@@ -996,14 +981,14 @@ RV_Data::generate_timeline_simple()
 
 	// Calculating and drawing bubbles based on stall & rectangle width
 	if (wpt > 10) {
-	  double bubble_total_radius = sqrt((stall/1000) * (wpt*seg_hpt) * (4*atan(1)));
+	  double bubble_total_radius = sqrt((mpki) * (wpt*seg_hpt) * (4*atan(1)));
 	  
 	  while (bubble_total_radius != 0) {
 	    // establishing radius
 	    double radius; 
 	    if ((bubble_total_radius > (wpt / 2)) || (bubble_total_radius > (seg_hpt/2))) {
 	      if (wpt > seg_hpt) {radius = seg_hpt/3;}
-	      else {radius = seg_hpt/3;}
+	      else {radius = wpt/2;}
 	      bubble_total_radius = bubble_total_radius - radius; 
 	    } else {
 	      radius = bubble_total_radius;
@@ -1063,29 +1048,79 @@ RV_Data::generate_timeline_simple()
 
     }
 
-  // traverse a second time for patterns:
-  for ( auto& s: seg_info )
-    {
-      
-      const double xpt = s.start_s * s_to_pt;
-      const double ypt = s.level * level_to_pt + (level_to_pt * max_level);
-      const double wpt = ( s.end_s - s.start_s ) * s_to_pt;
-      
+  // Draw patterns:
+  // Finding patterns 
+  vector<int> seg_indices; 
+  for (auto& s:seg_info) {
+    seg_indices.push_back(s.timer_idx); 
+  }
+  
+  // vector<int> tester = {1,2,3,4,3,4,5,6,7,8,6,7,8}; 
+  PatternFinder* pf = new PatternFinder(seg_indices, 30);
+  vector<int> patterns = pf->getPatterns(); 
+  vector<int> patternTracker = pf->getPatternTracker();
+  vector<int> repeats = pf->getRepeatNums(); 
+  
+  vector<double> currX;
+  for (int i = 0; i < max_level; i++) {currX.push_back(0);}
+  double curr_t_idx = 0; 
+  vector<Seg_Info> seg_info2 = seg_info; 
+ 
+  for (int r : repeats) {    
+    if (r == 1) {
+      // If not part of a patter draw in gray 
+      Seg_Info s = seg_info2[patterns[patternTracker[curr_t_idx]]];
+      double xpt = s.start_s * s_to_pt;
+      double wpt = ( s.end_s - s.start_s ) * s_to_pt;
+      double ypt = s.level * level_to_pt  + (level_to_pt * max_level);
       string clsName = "timer-" + to_string(s.timer_idx) + "B"; 
       string name1 = leaf_name[s.timer_idx] + "B"; 
+
       
-      fprintf(fh, "<rect class=\"%s\" fill=\"white\" stroke=\"black\" "
-              "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n", 
+      fprintf(fh, "<rect class=\"%s\" fill=\"gray\" stroke=\"white\" stroke-width=\".75\" "
+	      "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n", 
 	      clsName.c_str(), xpt, ypt, wpt, seg_hpt);
       
-      // Estimate width assuming that character width is font_size/1.2.
-      const int width_char = 1.2 * wpt / font_size;
-      const string name2 = escapeForXML( leaf_name[s.timer_idx].substr(0,width_char) );
+    } else { 
+
+      // if part of a pattern, draw at approprate location in blue
+      int start_idx = patternTracker[curr_t_idx-1];
+      int end_idx = patternTracker[curr_t_idx];
+      double wpt = 0; 
+      Seg_Info s = seg_info2[patterns[start_idx]]; 
+
+      if (seg_info2[patterns[start_idx]].timer_idx != 0) {
+	for (int i = start_idx+1; i <= end_idx; i++) {
+	  Seg_Info t = seg_info2[patterns[i]]; 
+	  wpt = wpt + ((t.end_s - t.start_s) * s_to_pt);
+	  seg_info2[patterns[i]].timer_idx = 0; 
+	}
+	
+	double xpt; 
+	if ((s.start_s * s_to_pt) > currX[s.level]) {xpt = s.start_s * s_to_pt; currX[s.level] = xpt;}
+	else {xpt = currX[s.level]; currX[s.level] = currX[s.level] + wpt;}
+	
+	double ypt = s.level * level_to_pt  + (level_to_pt * max_level);
+	string clsName = "timer-" + to_string(s.timer_idx) + "B"; 
+	string name1 = leaf_name[s.timer_idx] + "B"; 
+	
+	fprintf(fh, "<rect class=\"%s\" fill=\"yellow\" stroke=\"white\" stroke-width=\".75\" "
+		"x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n", 
+		clsName.c_str(), xpt, ypt, wpt, seg_hpt);
+	
+	fprintf(fh, R"--(<text x="%.3f" y="%.3f">%s</text>)--",
+		xpt + 0.5*font_size, ypt + font_size, name1.c_str() );
+      }
       
-      if ( width_char < 2 ) continue;
-      fprintf(fh, R"--(<text x="%.3f" y="%.3f">%s</text>)--",
-              xpt + 0.5*font_size, ypt + font_size, name2.c_str() );
     }
+    curr_t_idx++; 
+  }
+
+  for (int i = 0; i < currX.size(); i++) {
+    printf("\n %.3f ", currX[i]); 
+  }
+  
+ 
 
   fprintf(fh,"%s","</g></svg>\n");
 
