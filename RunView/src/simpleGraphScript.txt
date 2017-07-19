@@ -1,12 +1,15 @@
 <script type="text/javascript"> 
      $('#all').find('.myrect').mouseenter( function () colorChange(this) ); 
      $('#all').find('.myrect').click( function () expand(this) ); 
+
      function colorChange(rect) { 
      var color = rect.getAttribute("fill"); 
      $(rect).attr("fill", "rgb(255,101,142)"); 
      $(rect).mouseleave(function () { $(rect).attr("fill", color);}) 
      } 
+
      function expand(rect) {
+     $(circle).hide(); 
      var findMain = document.getElementById("all").getElementsByClassName("myrect"); 
      var svgHeight = Number(findMain.item(0).getAttribute("height")); 
      var width = Number(rect.getAttribute("width")); 

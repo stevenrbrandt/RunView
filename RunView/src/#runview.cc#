@@ -12,6 +12,11 @@
 #include <string.h>
 #include "ctimers.h"
 #include "util.h"
+#include <time.h>
+#include <fstream>
+#include <PatternFinder.h>
+#include <limits.h>
+#include <unistd.h>
 #include "rv_papi.h"
 #include <cmath>
 
@@ -806,7 +811,7 @@ RV_Data::generate_timeline_simple()
   printf("\n\n duration: %.3f \n \nf", duration); 
   //
   // Level to Point
-  const double level_ht_lines = 2;
+  const double level_ht_lines = 5.7;
   const double level_to_pt = level_ht_lines * baselineskip_pt;
 
   // Height of a Segment.
@@ -819,11 +824,19 @@ RV_Data::generate_timeline_simple()
   const double image_wpt = plot_area_wpt;
   const double image_hpt = plot_area_hpt;
 
-  fprintf(fh,"%s",R"~~(<?xml version="1.0" standalone="no"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
-  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-)~~");
+  fprintf(fh, "%s",
+	  "<html> \n <body> \n"); 
 
+  fprintf(fh, "%s",
+	  "<head> \n"
+	  "<meta http-equiv=\"Conten<h1></h1>t-Type\" content=\"text/html; charset=UTF-8\"> \n"
+	  "<script src=\"http://code.jquery.com/jquery-latest.min.js\"></script> \n"
+	  "</head> \n");
+
+  fprintf(fh,"%s",
+          "<?xml version=\"1.0\" standalone=\"no\"?>\n"
+          "<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\"\n"
+          "  \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n");
   // InfoBox information 
   fprintf(fh,"<svg width=\"%.3fpt\" height=\"100pt\"\n"
           "viewBox=\"0 0 %.3f 100\"\n"
@@ -883,10 +896,10 @@ RV_Data::generate_timeline_simple()
   // smallest size that's comfortably readable for substantial amounts
   // of text.
   //
-  fprintf(fh,R"~~(<svg width="%.3fpt" height="%.3fpt"
-          viewBox="0 0 %.3f %.3f"
-          version="1.1" xmlns="http://www.w3.org/2000/svg">
-)~~",
+  fprintf(fh,"<svg width=\"%.3fpt\" height=\"%.3fpt\"\n"
+          "viewBox=\"0 0 %.3f %.3f\"\n"
+	  "preserveAspectRatio = \"xMinYMin meet\" "
+          "version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\">\n",
           image_wpt, image_hpt, image_wpt, image_hpt);
 
   fprintf(fh,"%s\n","<desc>Created by RunView</desc>");
@@ -946,8 +959,6 @@ RV_Data::generate_timeline_simple()
       const string name = escapeForXML( leaf_name[s.timer_idx].substr(0,width_char) );
 
       if ( width_char < 2 ) continue;
-
-      string name = escapeForXML( leaf_name[s.timer_idx].substr(0,width_char) );
       fprintf(fh, R"--(<text x="%.3f" y="%.3f">%s</text>)--",
               xpt + 0.5*font_size, ypt + font_size, name.c_str() );
 
@@ -1001,6 +1012,7 @@ RV_Data::generate_timeline_simple()
 
       }
 #endif
+
       fprintf(fh, "<rect class=\"%s\" fill=\"%s\" stroke=\"black\" "
 	      "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n", 
 	      clsName.c_str(), fill_color.c_str(), xpt, ypt, wpt, seg_hpt);
