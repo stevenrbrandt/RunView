@@ -1,11 +1,11 @@
 // Anna Neshyba, cc file for PatternFinder class, c++
 
-#include<vector>
 #include "PatternFinder.h"
 #include <iostream>
 #include <string.h>
 #include <sstream>
 #include <stdio.h>
+#include <assert.h>
 #include <vector>
 #include <stdlib.h>
 #include <ctype.h>
@@ -16,11 +16,13 @@ using namespace std;
 
 // methods 
 PatternFinder::PatternFinder(vector<int> v, int patternLength) {
+  pattern_len_limit = patternLength;
   list = v; 
+  list_size = v.size();
+  for ( int i=0; i<patternLength; i++ ) list.push_back(1<<30);
   buildVector(); 
   sort(); 
-  findPatterns(patternLength); 
-  findRepeatNums(); 
+  findPatterns(); 
 }
 
 vector<int> PatternFinder::getPatterns() {
@@ -48,9 +50,105 @@ void PatternFinder::findRepeatNums() {
     printf("%d | %d \n", i, repeats[i]); 
     } 
   
-  printf("\n Repeats size: %d!", repeats.size()); 
+  printf("\n Repeats size: %zd!", repeats.size()); 
 }
 
+void PatternFinder::findPatterns()
+{
+  vector<int> run_start(pattern_len_limit+1,0);
+  vector<bool> run_overlap(pattern_len_limit+1,false);
+  int max_cover = 0;
+  int max_cover_pidx = -1;
+  int max_cover_len = -1;
+  int max_repeats = -1;
+
+  auto submatch = [&](int idx1, int idx2, int len )
+    {
+      for ( int i=0; i<len; i++ )
+        if ( list[idx1+i] != list[idx2+i] ) return false;
+      return true;
+    };
+
+  for ( int i=1; i<patterns.size(); i++ )
+    {
+      const int idx1 = patterns[i];
+      bool match_possible = true;
+      for ( int j=1; j<=pattern_len_limit; j++ )
+        {
+          const int idx2 = patterns[run_start[j]];
+          if ( !match_possible || !submatch(idx1, idx2, j) )
+            {
+              match_possible = false;
+              const int repeats = i - run_start[j];
+              const int cover = j * repeats;
+              assert( cover > 0 );
+              if ( cover > max_cover && !run_overlap[j] )
+                {
+                  max_cover = cover;
+                  max_repeats = repeats;
+                  max_cover_pidx = run_start[j];
+                  max_cover_len = j;
+                  if ( false )
+                    printf("Max cover %d, idx %d, len %d, rpt %d\n",
+                           max_cover, max_cover_pidx, max_cover_len,
+                           max_repeats);
+                }
+              bool overlap = false;
+              for ( int pl = 1; pl <= j/2 && !overlap; pl++ )
+                overlap = submatch(idx1,idx1+j-pl,pl);
+              run_start[j] = i;
+              run_overlap[j] = overlap;
+            }
+        }
+    }
+
+  pattern_start_pidx = max_cover_pidx;
+  pattern_repeats = max_repeats;
+
+  instance_next.resize(list_size);
+  for ( int i=0; i<list_size; i++ ) instance_next[i] = i;
+
+  vector<int> pidx_sorted;
+  for ( int i=0; i<pattern_repeats; i++ )
+    pidx_sorted.push_back(pattern_start_pidx+i);
+  ::sort(pidx_sorted.begin(),pidx_sorted.end(),
+       [&](int a, int b){ return patterns[a] < patterns[b]; } );
+
+  for ( int i=0; i<pattern_repeats-1; i++ )
+    {
+      const int curr_st_lidx = patterns[pidx_sorted[i]];
+      const int next_st_lidx = patterns[pidx_sorted[i+1]];
+      assert( submatch( curr_st_lidx, next_st_lidx, max_cover_len ) );
+      assert( next_st_lidx > curr_st_lidx );
+      for ( int j=0; j<max_cover_len; j++ )
+        {
+          const int curr_lidx = curr_st_lidx + j;
+          const int next_lidx = next_st_lidx + j;
+          assert( curr_lidx < list_size );
+          assert( next_lidx < list_size );
+          assert( instance_next[ curr_lidx ] == curr_lidx );
+          instance_next[ curr_lidx ] = next_lidx;
+        }
+    }
+}
+
+vector<int>
+PatternFinder::getBackPairs(size_t list_idx)
+{
+  vector<int> back_pairs;
+  assert( list_idx < list.size() );
+  while ( true )
+    {
+      const int idx = instance_next[list_idx];
+      back_pairs.push_back( idx );
+      if ( idx == list_idx ) break;
+      if ( instance_next[list_idx-1] == list_idx-1 ) break;
+      list_idx = idx;
+    }
+  return move(back_pairs);
+}
+
+#if 0
 void PatternFinder::findPatterns(int patternLength) {
   int n = patterns.size(); 
   int tracker = 0; 
@@ -93,9 +191,10 @@ void PatternFinder::findPatterns(int patternLength) {
   
     
 }
+#endif
 
 void PatternFinder::buildVector() {
-  for ( int i=0; i<list.size(); i++ ) patterns.push_back(i);
+  for ( int i=0; i<list_size; i++ ) patterns.push_back(i);
 
 
 #if 0
@@ -139,15 +238,13 @@ void PatternFinder::buildVector() {
 
 void PatternFinder::sort() {
 
-  const int n = (int)list.size();
-
   auto compare = [&](const int a, const int b)
     {
       if ( a == b ) return true;
 
       if ( a < b ) {
 
-        for (int i = b; i < n; i++) {
+        for (int i = b; i < b+pattern_len_limit; i++) {
           const int aidx = i - b + a;
           if ( list[aidx] == list[i] ) continue;
           return list[aidx] < list[i];
@@ -156,7 +253,7 @@ void PatternFinder::sort() {
 
       } else {
 
-        for (int i = a; i < n; i++) {
+        for (int i = a; i < a+pattern_len_limit; i++) {
           const int bidx = i - a + b;
           if ( list[i] < list[bidx] ) {
             return true;
@@ -213,7 +310,7 @@ void PatternFinder::sort() {
     printf("\n"); 
   }
   */
-  printf("\n Patterns size: %d", patterns.size()); 
+  printf("\n Patterns size: %zd\n", patterns.size()); 
   
 }
 
