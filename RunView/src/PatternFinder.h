@@ -1,5 +1,6 @@
 // Anna Neshyba, this is the header file for PatternFinder, c++
 
+#include <assert.h>
 #include <vector>
 #include <string>
 
@@ -27,3 +28,16 @@ public:
   vector<int> getBackPairs(size_t list_idx);
 
 };
+
+const int pattern_finder_tshift = 5;
+
+
+inline int PatternFinderEncodeStart(int timer_idx, int level)
+{
+  assert( level < (1 << pattern_finder_tshift - 1 ) );
+  return ( timer_idx << pattern_finder_tshift ) + ( level << 1 );
+}
+inline int PatternFinderEncodeStop(int timer_idx, int level)
+{
+  return ( timer_idx << pattern_finder_tshift ) + ( level << 1 ) + 1;
+}

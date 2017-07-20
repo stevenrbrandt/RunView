@@ -137,8 +137,10 @@ public:
 // start time and the right side based on the timer stop time.
 //
 struct Seg_Info {
-  Seg_Info(int ti, int l, double ss, double es):
+  Seg_Info(int e_idx, int ti, int l, double ss, double es):
+    start_event_idx(e_idx),
     timer_idx(ti), level(l), start_s(ss), end_s(es),composite(false){};
+  int start_event_idx;
   int timer_idx, level;
   double start_s, end_s;
   bool composite;
@@ -325,8 +327,9 @@ RV_Data::generate_segments
   //
   vector<const RV_Timer_Event*> timer_stack = { NULL };
 
-  for ( auto& ev: events )
+  for ( int i=0; i<events.size(); i++ )
     {
+      const RV_Timer_Event& ev = events[i];
       const int idx = ev.timer_index;
 
       const RV_Timer_Event* const ev_last = timer_stack.back();
@@ -344,7 +347,7 @@ RV_Data::generate_segments
         assert( ev_last->timer_index == idx );
         timer_stack.pop_back();
         seg_info.emplace_back
-          (idx,timer_stack.size(),ev_last->etime_s_get(),ev.etime_s_get());
+          (i,idx,timer_stack.size(),ev_last->etime_s_get(),ev.etime_s_get());
         if ( ev_last->have_papi_sample )
           seg_info.back().papi.accumulate(ev.papi_sample,ev_last->papi_sample);
         break;
@@ -1071,37 +1074,56 @@ RV_Data::generate_timeline_simple()
     }
 
   vector <int> event_indices;
-  for ( auto& ev: events )
-    switch ( ev.event_type ) {
-    case RET_Timer_Start: event_indices.push_back( ev.timer_index << 1 ); break;
-    case RET_Timer_Stop:
-      event_indices.push_back( ( ev.timer_index << 1 ) + 1 ); break;
-    case RET_Timer_Reset: event_indices.push_back( -2 ); break;
-    }
+  {
+    int level = 0;
+    for ( auto& ev: events )
+      switch ( ev.event_type ) {
+      case RET_Timer_Start:
+        event_indices.push_back
+          ( PatternFinderEncodeStart(ev.timer_index,level) );
+        level++;
+        break;
+      case RET_Timer_Stop:
+        level--;
+        assert( level >= 0 );
+        event_indices.push_back
+          ( PatternFinderEncodeStop(ev.timer_index,level) );
+        break;
+      case RET_Timer_Reset: event_indices.push_back( -2 ); break;
+      }
+  }
 
-  PatternFinder pf2(move(event_indices), 10000);
+  PatternFinder pf2(move(event_indices), 2000);
 
   vector<RV_Timer_Event> timer_compact;
 
+  vector<bool> events_done(events.size());
   timer_compact.push_back( events[0] );
+  events_done[0] = true;
+  vector<bool> timer_compact_is_composite;
 
   for ( int i=1; i<events.size(); i++ )
     {
+      if ( events_done[i] ) continue;
       const RV_Timer_Event& ev = events[i];
       const RV_Timer_Event& ev_last = timer_compact.back();
       int64_t duration = 0;
       RV_PAPI_Sample* const papi_sample =
         ev_last.have_papi_sample
         ? new RV_PAPI_Sample(*ev_last.papi_sample) : NULL;
-      for ( int ii: pf2.getBackPairs(i) )
+      auto back_pairs = pf2.getBackPairs(i);
+      for ( int ii: back_pairs )
         {
           RV_Timer_Event& prev = events[ii-1];
           RV_Timer_Event& curr = events[ii];
+          assert( !events_done[ii] );
+          events_done[ii] = true;
           if ( papi_sample && prev.have_papi_sample && curr.have_papi_sample )
             papi_sample->accumulate(curr.papi_sample,prev.papi_sample);
           else
             duration += curr.etime_get() - prev.etime_get();
         }
+      timer_compact_is_composite.push_back( back_pairs.size() > 1 );
       if ( papi_sample )
         {
           papi_sample->cyc += duration;
@@ -1117,10 +1139,10 @@ RV_Data::generate_timeline_simple()
 
   for ( auto& s: seg_compact_info )
     {
-      const int r = 1;
+      const bool composite = timer_compact_is_composite[s.start_event_idx];
 
       // If not part of a pattern draw in gray 
-      const char* const color = r == 1 ? "gray" : "yellow";
+      const char* const color = composite ? "yellow" : "gray";
 
       double xpt = s.start_s * s_to_pt;
       double wpt = ( s.end_s - s.start_s ) * s_to_pt;
