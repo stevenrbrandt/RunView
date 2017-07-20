@@ -76,13 +76,30 @@ void PatternFinder::findPatterns()
 
   vector<Run_Start> run_start;
 
+  const int levmask = ( 1 << pattern_finder_tshift ) - 1;
+
+  auto get_level = [&](int a) { return ( a & levmask ) >> 1 ; };
+  auto is_start = [&](int a) { return ! ( a & 1 ); };
+
   for ( int i=1; i<patterns.size(); i++ )
     {
       const int idx0 = patterns[i-1];
       const int idx1 = patterns[i];
       int prefix = 0;
-      while ( prefix < pattern_len_limit
-              && list[idx0+prefix] == list[idx1+prefix] ) prefix++;
+
+      const int level_start = get_level(list[idx1]);
+
+      if ( is_start(list[idx1] ) )
+        for ( int j=0; j<pattern_len_limit; j++ )
+          {
+            const int elt0 = list[idx0+j];
+            if ( elt0 != list[idx1+j] ) break;
+            if ( is_start(elt0) ) continue;
+            const int level = get_level(elt0);
+            if ( level < level_start ) break;
+            if ( level > level_start ) continue;
+            prefix = j+1;
+          }
 
       int nearest_pidx = i;
 
@@ -123,8 +140,7 @@ void PatternFinder::findPatterns()
   pattern_start_pidx = max_cover_pidx;
   pattern_repeats = max_repeats;
 
-  instance_next.resize(list_size);
-  for ( int i=0; i<list_size; i++ ) instance_next[i] = i;
+  instance_next.resize(list_size,-1);
 
   vector<int> pidx_sorted;
   for ( int i=0; i<pattern_repeats; i++ )
@@ -144,7 +160,7 @@ void PatternFinder::findPatterns()
           const int next_lidx = next_st_lidx + j;
           assert( curr_lidx < list_size );
           assert( next_lidx < list_size );
-          assert( instance_next[ curr_lidx ] == curr_lidx );
+          assert( instance_next[ curr_lidx ] == -1 );
           instance_next[ curr_lidx ] = next_lidx;
         }
     }
@@ -153,15 +169,13 @@ void PatternFinder::findPatterns()
 vector<int>
 PatternFinder::getBackPairs(size_t list_idx)
 {
+  int idx = list_idx;
   vector<int> back_pairs;
-  assert( list_idx < list.size() );
-  while ( true )
+  assert( idx < list.size() );
+  while ( idx >= 0 )
     {
-      const int idx = instance_next[list_idx];
       back_pairs.push_back( idx );
-      if ( idx == list_idx ) break;
-      if ( instance_next[list_idx-1] == list_idx-1 ) break;
-      list_idx = idx;
+      idx = instance_next[idx];
     }
   return move(back_pairs);
 }
