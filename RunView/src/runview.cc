@@ -129,18 +129,38 @@ public:
   map<string,RV_Timer_Node> children;
 };
 
+//
+// Structure and container for holding information on segments to plot.
+//
+// There is a segment for each time a timer is stopped. It will be
+// plotted as a rectangle with the left side based on the timer
+// start time and the right side based on the timer stop time.
+//
+struct Seg_Info {
+  Seg_Info(int ti, int l, double ss, double es):
+    timer_idx(ti), level(l), start_s(ss), end_s(es),composite(false){};
+  int timer_idx, level;
+  double start_s, end_s;
+  bool composite;
+  RV_PAPI_Sample papi;
+};
+
+
 class RV_Data {
 public:
   RV_Data():timer_tree("root"){};
   void init();
   int atend();
   double generate_rect(double y, double w, double scaler, double Psize, RV_Timer_Node* curr, FILE* fh);
+  vector<Seg_Info> generate_segments
+  (const vector<RV_Timer_Event>& events, int& max_level);
   void generate_text_tree();
   void generate_graph_simple();
   void generate_timeline_simple();
   RV_Timer_Node timer_tree;
   int id_serial; 
 };
+
 
 RV_Data rv_data;
 RV_CTimers rv_ctimers;
@@ -292,6 +312,52 @@ RV_Data::atend()
   return 0;
 }
 
+vector<Seg_Info>
+RV_Data::generate_segments
+(const vector<RV_Timer_Event>& events, int& max_level)
+{
+  vector<Seg_Info> seg_info;
+
+  // Maximum depth of tree.
+  max_level = 0;
+
+  // List of start events for currently active timers.
+  //
+  vector<const RV_Timer_Event*> timer_stack = { NULL };
+
+  for ( auto& ev: events )
+    {
+      const int idx = ev.timer_index;
+
+      const RV_Timer_Event* const ev_last = timer_stack.back();
+
+      switch ( ev.event_type ) {
+
+      case RET_Timer_Start:
+        // Push timer on to list of active timers.
+        timer_stack.push_back(&ev);
+        set_max(max_level,timer_stack.size()); // Keep track of max # timers.
+        break;
+
+      case RET_Timer_Stop:
+        // Pop timer from list of active timers and add new segment to list.
+        assert( ev_last->timer_index == idx );
+        timer_stack.pop_back();
+        seg_info.emplace_back
+          (idx,timer_stack.size(),ev_last->etime_s_get(),ev.etime_s_get());
+        if ( ev_last->have_papi_sample )
+          seg_info.back().papi.accumulate(ev.papi_sample,ev_last->papi_sample);
+        break;
+
+      case RET_Timer_Reset: break;
+
+      default: assert( false );
+      }
+    }
+  return move(seg_info);
+}
+
+
 double 
 RV_Data::generate_rect(double y, double w, double scaler,
  double Psize, RV_Timer_Node* curr, FILE* fh) 
@@ -373,10 +439,10 @@ RV_Data::generate_rect(double y, double w, double scaler,
       }
       
       // establishing x and y coordinates
-      double circle_x = rand()%(int)((x+w)-x+1) + x; 
+      double circle_x = rand()%max(1,int((x+w)-x+1)) + x;
       if ((circle_x + radius) > (x+w)) {circle_x = (x+w) - radius;}
       else if (circle_x - radius < x) {circle_x = x + radius;}
-      double circle_y = rand()%(int)((y+h)-(y+15)+1) + (y+15); 
+      double circle_y = rand()%max(1,int((y+h)-(y+15)+1)) + (y+15);
       if ((circle_y + radius) > (y+h)) {circle_y = (y+h) - radius;}
       else if (circle_y - radius < (y+15)) {circle_y = (y+15) + radius;}
       
@@ -417,7 +483,7 @@ RV_Data::generate_rect(double y, double w, double scaler,
   } else {
     fprintf(fh, "<text id=\"%s\" class=\"text\" y=\"0\" font-size=\"0\" > \n"
 	    "<tspan class=\"textEl\" x=\"0\"> %s </tspan> \n"
-	    "</text> \n", tName.c_str(), y+10, x+4, pName.c_str());
+	    "</text> \n", tName.c_str(), pName.c_str());
   }
   
   if (curr->children.size() != 0) {
@@ -691,6 +757,8 @@ RV_Data::generate_graph_simple()
    fclose(fh);
   }
 
+
+
 void
 RV_Data::generate_timeline_simple()
 {
@@ -723,6 +791,7 @@ RV_Data::generate_timeline_simple()
   //
   //  Timer [0017] SymBase: SymBase_Startup in CCTK_STARTUP is not a tree timer.
   //
+
   vector<bool> participant(ntimers);
   vector<string> leaf_name(ntimers);
   for ( int i=0; i<ntimers; i++ )
@@ -732,59 +801,14 @@ RV_Data::generate_timeline_simple()
       if ( pieces[0] == "main" ) participant[i] = true;
     }
 
-  //
-  // Structure and container for holding information on segments to plot.
-  //
-  // There is a segment for each time a timer is stopped. It will be
-  // plotted as a rectangle with the left side based on the timer
-  // start time and the right side based on the timer stop time.
-  //
-  struct Seg_Info {
-    Seg_Info(int ti, int l, double ss, double es):
-      timer_idx(ti), level(l), start_s(ss), end_s(es){};
-    int timer_idx, level;
-    double start_s, end_s;
-    RV_PAPI_Sample papi;
-  };
-  vector<Seg_Info> seg_info;
-
   // Maximum depth of tree.
   int max_level = 0;
 
-  // List of start events for currently active timers.
-  //
-  vector<RV_Timer_Event*> timer_stack = { NULL };
-
+  vector<RV_Timer_Event> events;
   for ( auto& ev: rv_ctimers.events )
-    {
-      const int idx = ev.timer_index;
-      if ( ! participant[idx] ) continue;
+    if ( participant[ev.timer_index] ) events.push_back(ev);
 
-      RV_Timer_Event* const ev_last = timer_stack.back();
-
-      switch ( ev.event_type ) {
-
-      case RET_Timer_Start:
-        // Push timer on to list of active timers.
-        timer_stack.push_back(&ev);
-        set_max(max_level,timer_stack.size()); // Keep track of max # timers.
-        break;
-
-      case RET_Timer_Stop:
-        // Pop timer from list of active timers and add new segment to list.
-        assert( ev_last->timer_index == idx );
-        timer_stack.pop_back();
-        seg_info.emplace_back
-          (idx,timer_stack.size(),ev_last->etime_s_get(),ev.etime_s_get());
-        if ( ev_last->have_papi_sample )
-          seg_info.back().papi.accumulate(ev.papi_sample,ev_last->papi_sample);
-        break;
-
-      case RET_Timer_Reset: break;
-
-      default: assert( false );
-      }
-    }
+  vector<Seg_Info> seg_info = generate_segments(events,max_level);
 
   /// Write SVG Image of Segments
   //
@@ -918,8 +942,6 @@ RV_Data::generate_timeline_simple()
   // Generate SVG for individual segments.
   // Also tracking for pattern recognition
 
-  vector<int> events; 
-
   for ( auto& s: seg_info )
     {
       const double xpt = s.start_s * s_to_pt;
@@ -1048,79 +1070,72 @@ RV_Data::generate_timeline_simple()
 
     }
 
-  // Draw patterns:
-  // Finding patterns 
-  vector<int> seg_indices; 
-  for (auto& s:seg_info) {
-    seg_indices.push_back(s.timer_idx); 
-  }
-  
-  // vector<int> tester = {1,2,3,4,3,4,5,6,7,8,6,7,8}; 
-  PatternFinder* pf = new PatternFinder(seg_indices, 30);
-  vector<int> patterns = pf->getPatterns(); 
-  vector<int> patternTracker = pf->getPatternTracker();
-  vector<int> repeats = pf->getRepeatNums(); 
-  
-  vector<double> currX;
-  for (int i = 0; i < max_level; i++) {currX.push_back(0);}
-  double curr_t_idx = 0; 
-  vector<Seg_Info> seg_info2 = seg_info; 
- 
-  for (int r : repeats) {    
-    if (r == 1) {
-      // If not part of a patter draw in gray 
-      Seg_Info s = seg_info2[patterns[patternTracker[curr_t_idx]]];
+  vector <int> event_indices;
+  for ( auto& ev: events )
+    switch ( ev.event_type ) {
+    case RET_Timer_Start: event_indices.push_back( ev.timer_index << 1 ); break;
+    case RET_Timer_Stop:
+      event_indices.push_back( ( ev.timer_index << 1 ) + 1 ); break;
+    case RET_Timer_Reset: event_indices.push_back( -2 ); break;
+    }
+
+  PatternFinder pf2(move(event_indices), 1000);
+
+  vector<RV_Timer_Event> timer_compact;
+
+  timer_compact.push_back( events[0] );
+
+  for ( int i=1; i<events.size(); i++ )
+    {
+      const RV_Timer_Event& ev = events[i];
+      const RV_Timer_Event& ev_last = timer_compact.back();
+      int64_t duration = 0;
+      RV_PAPI_Sample* const papi_sample =
+        ev_last.have_papi_sample
+        ? new RV_PAPI_Sample(*ev_last.papi_sample) : NULL;
+      for ( int ii: pf2.getBackPairs(i) )
+        {
+          RV_Timer_Event& prev = events[ii-1];
+          RV_Timer_Event& curr = events[ii];
+          if ( papi_sample && prev.have_papi_sample && curr.have_papi_sample )
+            papi_sample->accumulate(curr.papi_sample,prev.papi_sample);
+          else
+            duration += curr.etime_get() - prev.etime_get();
+        }
+      if ( papi_sample )
+        {
+          papi_sample->cyc += duration;
+          timer_compact.emplace_back(papi_sample,ev.timer_index,ev.event_type);
+        }
+      else
+        timer_compact.emplace_back
+          (duration+ev_last.etime_get(),ev.timer_index,ev.event_type);
+    }
+
+  vector<Seg_Info> seg_compact_info =
+    generate_segments(timer_compact,max_level);
+
+  for ( auto& s: seg_compact_info )
+    {
+      const int r = 1;
+
+      // If not part of a pattern draw in gray 
+      const char* const color = r == 1 ? "gray" : "yellow";
+
       double xpt = s.start_s * s_to_pt;
       double wpt = ( s.end_s - s.start_s ) * s_to_pt;
       double ypt = s.level * level_to_pt  + (level_to_pt * max_level);
-      string clsName = "timer-" + to_string(s.timer_idx) + "B"; 
-      string name1 = leaf_name[s.timer_idx] + "B"; 
+      string clsName = "timer-" + to_string(s.timer_idx) + "B";
+      string name1 = leaf_name[s.timer_idx] + "B";
 
-      
-      fprintf(fh, "<rect class=\"%s\" fill=\"gray\" stroke=\"white\" stroke-width=\".75\" "
-	      "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n", 
-	      clsName.c_str(), xpt, ypt, wpt, seg_hpt);
-      
-    } else { 
+      fprintf(fh, "<rect class=\"%s\" fill=\"%s\" stroke=\"white\" stroke-width=\".75\" "
+              "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n", 
+              clsName.c_str(), color, xpt, ypt, wpt, seg_hpt);
+	
+      fprintf(fh, R"--(<text x="%.3f" y="%.3f">%s</text>)--",
+              xpt + 0.5*font_size, ypt + font_size, name1.c_str() );
 
-      // if part of a pattern, draw at approprate location in blue
-      int start_idx = patternTracker[curr_t_idx-1];
-      int end_idx = patternTracker[curr_t_idx];
-      double wpt = 0; 
-      Seg_Info s = seg_info2[patterns[start_idx]]; 
-
-      if (seg_info2[patterns[start_idx]].timer_idx != 0) {
-	for (int i = start_idx+1; i <= end_idx; i++) {
-	  Seg_Info t = seg_info2[patterns[i]]; 
-	  wpt = wpt + ((t.end_s - t.start_s) * s_to_pt);
-	  seg_info2[patterns[i]].timer_idx = 0; 
-	}
-	
-	double xpt; 
-	if ((s.start_s * s_to_pt) > currX[s.level]) {xpt = s.start_s * s_to_pt; currX[s.level] = xpt;}
-	else {xpt = currX[s.level]; currX[s.level] = currX[s.level] + wpt;}
-	
-	double ypt = s.level * level_to_pt  + (level_to_pt * max_level);
-	string clsName = "timer-" + to_string(s.timer_idx) + "B"; 
-	string name1 = leaf_name[s.timer_idx] + "B"; 
-	
-	fprintf(fh, "<rect class=\"%s\" fill=\"yellow\" stroke=\"white\" stroke-width=\".75\" "
-		"x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n", 
-		clsName.c_str(), xpt, ypt, wpt, seg_hpt);
-	
-	fprintf(fh, R"--(<text x="%.3f" y="%.3f">%s</text>)--",
-		xpt + 0.5*font_size, ypt + font_size, name1.c_str() );
-      }
-      
     }
-    curr_t_idx++; 
-  }
-
-  for (int i = 0; i < currX.size(); i++) {
-    printf("\n %.3f ", currX[i]); 
-  }
-  
- 
 
   fprintf(fh,"%s","</g></svg>\n");
 
