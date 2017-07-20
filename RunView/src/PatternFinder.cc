@@ -55,8 +55,6 @@ void PatternFinder::findRepeatNums() {
 
 void PatternFinder::findPatterns()
 {
-  vector<int> run_start(pattern_len_limit+1,0);
-  vector<bool> run_overlap(pattern_len_limit+1,false);
   int max_cover = 0;
   int max_cover_pidx = -1;
   int max_cover_len = -1;
@@ -69,36 +67,56 @@ void PatternFinder::findPatterns()
       return true;
     };
 
+  struct Run_Start {
+    Run_Start(int pidxp, int lenp, bool overlapp):
+      pidx(pidxp),len(lenp),overlap(overlapp){};
+    int pidx, len;
+    bool overlap;
+  };
+
+  vector<Run_Start> run_start;
+
   for ( int i=1; i<patterns.size(); i++ )
     {
+      const int idx0 = patterns[i-1];
       const int idx1 = patterns[i];
-      bool match_possible = true;
-      for ( int j=1; j<=pattern_len_limit; j++ )
+      int prefix = 0;
+      while ( prefix < pattern_len_limit
+              && list[idx0+prefix] == list[idx1+prefix] ) prefix++;
+
+      int nearest_pidx = i;
+
+      while ( !run_start.empty() && run_start.back().len > prefix )
         {
-          const int idx2 = patterns[run_start[j]];
-          if ( !match_possible || !submatch(idx1, idx2, j) )
+          Run_Start done_run = run_start.back();
+          run_start.pop_back();
+          assert( done_run.pidx < nearest_pidx );
+          nearest_pidx = done_run.pidx;
+
+          const int repeats = i - done_run.pidx;
+          const int cover = done_run.len * repeats;
+
+          assert( cover > 0 );
+          if ( cover > max_cover && !done_run.overlap )
             {
-              match_possible = false;
-              const int repeats = i - run_start[j];
-              const int cover = j * repeats;
-              assert( cover > 0 );
-              if ( cover > max_cover && !run_overlap[j] )
-                {
-                  max_cover = cover;
-                  max_repeats = repeats;
-                  max_cover_pidx = run_start[j];
-                  max_cover_len = j;
-                  if ( false )
-                    printf("Max cover %d, idx %d, len %d, rpt %d\n",
-                           max_cover, max_cover_pidx, max_cover_len,
-                           max_repeats);
-                }
-              bool overlap = false;
-              for ( int pl = 1; pl <= j/2 && !overlap; pl++ )
-                overlap = submatch(idx1,idx1+j-pl,pl);
-              run_start[j] = i;
-              run_overlap[j] = overlap;
+              max_cover = cover;
+              max_repeats = repeats;
+              max_cover_pidx = done_run.pidx;
+              max_cover_len = done_run.len;
+              if ( true )
+                printf("Max cover %d, idx %d, len %d, rpt %d\n",
+                       max_cover, max_cover_pidx, max_cover_len,
+                       max_repeats);
             }
+        }
+
+      if ( prefix > 0
+           && ( run_start.empty() || run_start.back().len < prefix ) )
+        {
+          bool overlap = false;
+          for ( int pl = 1; pl <= prefix/2 && !overlap; pl++ )
+            overlap = submatch(idx1,idx1+prefix-pl,pl);
+          run_start.emplace_back( nearest_pidx, prefix, overlap );
         }
     }
 

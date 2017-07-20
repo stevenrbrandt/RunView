@@ -1079,7 +1079,7 @@ RV_Data::generate_timeline_simple()
     case RET_Timer_Reset: event_indices.push_back( -2 ); break;
     }
 
-  PatternFinder pf2(move(event_indices), 1000);
+  PatternFinder pf2(move(event_indices), 10000);
 
   vector<RV_Timer_Event> timer_compact;
 
