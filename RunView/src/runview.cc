@@ -382,7 +382,7 @@ RV_Data::generate_rect(double y, double w, double scaler,
   // Declaring colors
   string red;
   string green; 
-  string blue = "50";
+  string blue = "100";
 
   // Declaring values for drawing
   double __attribute__((unused)) mpkiC;
@@ -410,7 +410,7 @@ RV_Data::generate_rect(double y, double w, double scaler,
       stall =  100.00 * double(n_cyc_stall) / n_cyc;
       
       int r = abs(255*full / 1000 - 255);
-      int g = abs((255 * fullns) / 100);
+      int g = abs((255 * fullns) / 100 + 20);
       green = to_string(g);
       red = to_string(r);
       
@@ -427,13 +427,13 @@ RV_Data::generate_rect(double y, double w, double scaler,
 
   // Calculating and drawing bubbles based on stall & rectangle width
   if (h > 10) {
-    double bubble_total_radius = sqrt((stall/1000) * (w*(h-15)) * (4*atan(1)));
+    double bubble_total_radius = sqrt((mpkiC) * (w*(h-15)) * (4*atan(1)));
     
     while (bubble_total_radius != 0) {
       // establishing radius
       double radius; 
-      if ((bubble_total_radius > (w / 2)) || (bubble_total_radius > ((h-15)/2))) {
-	if (w > h) {radius = (h-15)/2;}
+      if ((bubble_total_radius > (w / 3)) || (bubble_total_radius > ((h-15)/3))) {
+	if (w > h) {radius = (h-15)/3;}
 	else {radius = w/3;}
 	bubble_total_radius = bubble_total_radius - radius; 
       } else {
@@ -851,6 +851,11 @@ RV_Data::generate_timeline_simple()
   "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
 )~~");
 
+  fprintf(fh,"%s",
+          "<?xml version=\"1.0\" standalone=\"no\"?>\n"
+          "<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\"\n"
+
+          "  \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n");
   // InfoBox information 
   fprintf(fh,"<svg width=\"%.3fpt\" height=\"100pt\"\n"
           "viewBox=\"0 0 %.3f 100\"\n"
@@ -859,9 +864,6 @@ RV_Data::generate_timeline_simple()
           image_wpt, image_wpt);
   
   string name = "DK"; 
-  string happy ="aight";
-  string honor = "%100"; 
-  string zuko = "yes";
 
   fprintf(fh, "<g font-size=\"10.000\" font-family=\"sans-serif\" stroke-width=\"0.2\"> \n"
 	  " <rect id=\"infoBoxBackground\" fill=\"rgb(125, 175, 255)\" "
@@ -870,10 +872,7 @@ RV_Data::generate_timeline_simple()
 	  "<tspan class=\"textEl\" x=\"9.000\" font-size=\"15\" >Summary of Execution:  </tspan> \n "
 	  "<tspan class= \"textEl\" x=\"9.000\" dy=\"15\">Author: %s </tspan> \n"
 	  "<tspan class= \"textEl\" x=\"9.000\" dy=\"10\">Duration: %.4f</tspan> \n "
-	  "<tspan class= \"textEl\" x=\"9.000\" dy=\"10\">Happiness Levels: %s </tspan> \n"
-	  "<tspan class= \"textEl\" x=\"9.000\" dy=\"10\">Honor: %s </tspan>"
-	  "<tspan class= \"textEl\" x=\"9.000\" dy=\"10\">Is this Zuko: %s </tspan> \n"
-	  "</text> \n </g> \n </svg> \n", image_wpt, name.c_str(), duration, happy.c_str(), honor.c_str(), zuko.c_str() );
+	  "</text> \n </g> \n </svg> \n", image_wpt, name.c_str(), duration);
 
   // Drawing the timeline
   double secMarks = floor (duration); 
@@ -1011,9 +1010,9 @@ RV_Data::generate_timeline_simple()
 	  while (bubble_total_radius != 0) {
 	    // establishing radius
 	    double radius; 
-	    if ((bubble_total_radius > (wpt / 2)) || (bubble_total_radius > (seg_hpt/2))) {
+	    if ((bubble_total_radius > (wpt / 2.5)) || (bubble_total_radius > (seg_hpt/2.5))) {
 	      if (wpt > seg_hpt) {radius = seg_hpt/3;}
-	      else {radius = wpt/2;}
+	      else {radius = wpt/3;}
 	      bubble_total_radius = bubble_total_radius - radius; 
 	    } else {
 	      radius = bubble_total_radius;
@@ -1024,12 +1023,16 @@ RV_Data::generate_timeline_simple()
 	    double circle_x = rand()%(int)((xpt+wpt)-xpt+1) + xpt; 
 	    if ((circle_x + radius) > (xpt+wpt)) {circle_x = (xpt+wpt) - radius;}
 	    else if (circle_x - radius < xpt) {circle_x = xpt + radius;}
-	    double circle_y = rand()%(int)((ypt+seg_hpt)-(ypt)+1) + (ypt); 
-	    if ((circle_y + radius) > (ypt+seg_hpt)) {circle_y = (ypt+seg_hpt) - radius;}
-	    else if (circle_y - radius < (ypt)) {circle_y = (ypt) + radius;}
+	    double circle_y = rand()%(int)((ypt+seg_hpt-(ypt+baselineskip_ypt))+1) 
+	      + (ypt+baselineskip_ypt); 
+	    if ((circle_y + radius) > (ypt+seg_hpt)) 
+	      {circle_y = (ypt+seg_hpt) - radius;}
+	    else if (circle_y - radius < (ypt+baselineskip_ypt)) 
+	      {circle_y = (ypt+baselineskip_ypt) + radius;}
       
       
-	    fprintf(fh, "<circle class=\"circleCls\" cx=\"%.3f\" cy=\"%.3f\" r=\"%.5f\" fill=\"white\" "
+	    fprintf(fh, "<circle class=\"circleCls\" cx=\"%.3f\" cy=\"%.3f\""
+		    "r=\"%.5f\" fill=\"white\" "
 		    "stroke=\"black\" /> \n", circle_x, circle_y, radius);
 	  }
 	}
@@ -1051,7 +1054,7 @@ RV_Data::generate_timeline_simple()
 	  fprintf(fh, R"--(<text x="%.3f" y="%.3f">Stallr %.1f%%</text>)--",
 		  text_xpt, curr_text_ypt += baselineskip_ypt,
 		  100.0 * double(n_cyc_stall_r) / n_cyc );
-	*/
+	
 
 	if ( curr_text_ypt < text_limit_ypt )
         fprintf(fh, R"--(<text x="%.3f" y="%.3f">Stall %.1f%%</text>)--",
@@ -1067,6 +1070,7 @@ RV_Data::generate_timeline_simple()
 	    (fh, R"--(<text x="%.3f" y="%.3f">Fullns %.1f%%</text>)--",
 	     text_xpt, curr_text_ypt += baselineskip_ypt,
 	     100.0 * n_cyc_full / max(papi_long(1),n_cyc-n_cyc_stall) );
+	*/
 
       }
 #endif
@@ -1153,9 +1157,9 @@ RV_Data::generate_timeline_simple()
       fprintf(fh, "<rect class=\"%s\" fill=\"%s\" stroke=\"white\" stroke-width=\".75\" "
               "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n", 
               clsName.c_str(), color, xpt, ypt, wpt, seg_hpt);
-	
+      
       fprintf(fh, R"--(<text x="%.3f" y="%.3f">%s</text>)--",
-              xpt + 0.5*font_size, ypt + font_size, name1.c_str() );
+	      xpt + 0.5*font_size, ypt + font_size, name1.c_str() );
 
     }
 
