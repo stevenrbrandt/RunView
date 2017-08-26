@@ -14,6 +14,7 @@
 #include "util.h"
 #include "rv_papi.h"
 #include <cmath>
+#include <sys/stat.h>
 
 using namespace std;
 
@@ -30,6 +31,28 @@ string getfilepath(string fN)
 
      return fileName; 
   }
+
+void
+copy_to_server(string path)
+{
+  // Comment out the line below to enable copying to Web server.
+  return;
+  const string target_root = "/free/apache/htdocs/rvdemo";
+  const char* const target_dn = "ecelsrv3.ece.lsu.edu";
+  Strings pieces = split(path.c_str(),'/');
+  assert( pieces.size() > 1 );
+  string fname = pieces.back();  pieces.pop_back();
+  string pname = pieces.back();
+  string target_name = pname + "-" + fname;
+  string target_path = target_root + "/" + target_name;
+  string cmd = "scp -p " + path + " " + target_dn + ":" + target_path;
+  pid_t pid = fork();
+  if ( pid != 0 ) return;
+  printf("Command \"%s\"\n",cmd.c_str());
+  chmod(path.c_str(),0644);
+  execl("/bin/sh", "sh", "-c", cmd.c_str(), NULL);
+  assert( false );
+}
 
 
 class RV_Timer_Node {
@@ -611,7 +634,7 @@ RV_Data::generate_graph_simple()
   // Write SVG Header
   fprintf(fh,"%s",
 	  "<html> \n <head> \n"
-	  "<meta http-equiv=\"Conten<h1></h1>t-Type\" content=\"text/html; charset=UTF-8\"> \n"
+	  "<meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"> \n"
 	  "<script src=\"http://code.jquery.com/jquery-latest.min.js\"></script>\n"
 	  "</head> \n <body> \n"
           "<?xml version=\"1.0\" standalone=\"no\"?>\n"
@@ -758,7 +781,9 @@ RV_Data::generate_graph_simple()
    fprintf(fh, "%s", "</body> \n </head>\n </html>\n");
  
    fclose(fh);
-  }
+
+   copy_to_server(svg_file_path);
+}
 
 
 
@@ -1183,4 +1208,5 @@ RV_Data::generate_timeline_simple()
   fprintf(fh, "%s","</body> \n </html>"); 
   fclose(fh);
 
+  copy_to_server(svg_file_path);
 }
