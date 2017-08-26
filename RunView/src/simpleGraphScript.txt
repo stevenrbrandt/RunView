@@ -9,7 +9,7 @@
      } 
 
      function expand(rect) {
-     $(circle).hide(); 
+     $("circle").hide(); 
      var findMain = document.getElementById("all").getElementsByClassName("myrect"); 
      var svgHeight = Number(findMain.item(0).getAttribute("height")); 
      var width = Number(rect.getAttribute("width")); 
