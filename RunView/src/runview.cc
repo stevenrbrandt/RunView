@@ -997,7 +997,8 @@ RV_Data::generate_timeline_simple()
       string blue = "50"; 
  
 #ifdef HAVE_PAPI
-      if ( ! s.papi.filled() ) continue; {
+      if ( ! s.papi.filled() ) continue;
+      {
       const double text_xpt = xpt + 0.5 * font_size;
       const double baselineskip_ypt = font_size * 1.2;
 	const double text_limit_ypt = ypt + level_to_pt;
@@ -1122,7 +1123,9 @@ RV_Data::generate_timeline_simple()
       }
   }
 
-  PatternFinder pf2(move(event_indices), 2000);
+  assert( event_indices.size() == events.size() );
+
+  PatternFinder pf2(move(event_indices), events, 2000);
 
   vector<RV_Timer_Event> timer_compact;
 
@@ -1166,6 +1169,8 @@ RV_Data::generate_timeline_simple()
   vector<Seg_Info> seg_compact_info =
     generate_segments(timer_compact,max_level);
 
+  const int sc_to_pt = plot_area_wpt / seg_compact_info.back().end_s;
+
   for ( auto& s: seg_compact_info )
     {
       const bool composite = timer_compact_is_composite[s.start_event_idx];
@@ -1173,8 +1178,8 @@ RV_Data::generate_timeline_simple()
       // If not part of a pattern draw in gray 
       const char* const color = composite ? "yellow" : "gray";
 
-      double xpt = s.start_s * s_to_pt;
-      double wpt = ( s.end_s - s.start_s ) * s_to_pt;
+      double xpt = s.start_s * sc_to_pt;
+      double wpt = ( s.end_s - s.start_s ) * sc_to_pt;
       double ypt = s.level * level_to_pt  + (level_to_pt * max_level);
       string clsName = "timer-" + to_string(s.timer_idx) + "B";
       string name1 = leaf_name[s.timer_idx] + "B";
