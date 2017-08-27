@@ -890,7 +890,7 @@ RV_Data::generate_timeline_simple()
           "version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\">\n",
           image_wpt, image_wpt);
   
-  string name = "DK"; 
+  const char* const name = getenv("USER") ?: "";
 
   fprintf(fh, "<g font-size=\"10.000\" font-family=\"sans-serif\" stroke-width=\"0.2\"> \n"
 	  " <rect id=\"infoBoxBackground\" fill=\"rgb(125, 175, 255)\" "
@@ -899,7 +899,7 @@ RV_Data::generate_timeline_simple()
 	  "<tspan class=\"textEl\" x=\"9.000\" font-size=\"15\" >Summary of Execution:  </tspan> \n "
 	  "<tspan class= \"textEl\" x=\"9.000\" dy=\"15\">Author: %s </tspan> \n"
 	  "<tspan class= \"textEl\" x=\"9.000\" dy=\"10\">Duration: %.4f</tspan> \n "
-	  "</text> \n </g> \n </svg> \n", image_wpt, name.c_str(), duration);
+	  "</text> \n </g> \n </svg> \n", image_wpt, name, duration);
 
   // Drawing the timeline
   double secMarks = floor (duration); 
@@ -1122,6 +1122,7 @@ RV_Data::generate_timeline_simple()
           ( PatternFinderEncodeStop(ev.timer_index,level) );
         break;
       case RET_Timer_Reset: event_indices.push_back( -2 ); break;
+      default: assert( false );
       }
   }
 
