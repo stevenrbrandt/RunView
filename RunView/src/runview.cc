@@ -835,6 +835,7 @@ RV_Data::generate_timeline_simple()
   vector<RV_Timer_Event> events;
   for ( auto& ev: rv_ctimers.events )
     if ( participant[ev.timer_index] ) events.push_back(ev);
+  vector<bool> timer_is_composite(events.size());
 
   vector<Seg_Info> seg_info = generate_segments(events,max_level);
 
@@ -971,27 +972,43 @@ RV_Data::generate_timeline_simple()
   // Generate SVG for individual segments.
   // Also tracking for pattern recognition
 
+  auto emit_timeline = [&]
+    (double y_offset, vector<Seg_Info>& seg_info, bool pattern_plot)
+    {
+
   for ( auto& s: seg_info )
     {
       const double xpt = s.start_s * s_to_pt;
-      const double ypt = s.level * level_to_pt;
+      const double ypt = s.level * level_to_pt + y_offset;
       const double wpt = ( s.end_s - s.start_s ) * s_to_pt;
 
       string clsName = "timer-" + to_string(s.timer_idx); 
 
-      string fill_color = "rgb(179, 225, 255)"; 
-
-      fprintf(fh, "<rect class=\"%s\" fill=\"%s\" stroke=\"white\" stroke-width=\".75\" "
-	      "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n", 
-	      clsName.c_str(), fill_color.c_str(), xpt, ypt, wpt, seg_hpt);
+      auto emit_rect = [&](string fill, string stroke)
+        {
+          fprintf
+            (fh,
+             R"--(<rect class="%s" fill="%s" stroke="%s" stroke-width=".75"
+             x="%.3f" y="%.3f" width="%.3f" height="%.3f" />
+)--",
+             clsName.c_str(), fill.c_str(), stroke.c_str(),
+             xpt, ypt, wpt, seg_hpt);
+        };
 
       // Estimate width assuming that character width is font_size/1.2.
       const int width_char = 1.2 * wpt / font_size;
-      const string name = escapeForXML( leaf_name[s.timer_idx].substr(0,width_char) );
+      const string name =
+        escapeForXML( leaf_name[s.timer_idx].substr(0,width_char) );
 
-      if ( width_char > 2 ) 
-      fprintf(fh, R"--(<text x="%.3f" y="%.3f">%s</text>)--",
-              xpt + 0.5*font_size, ypt + font_size, name.c_str() );
+      if ( ! s.papi.filled() )
+        {
+          string fill_color = "rgb(179, 225, 255)"; 
+          emit_rect(fill_color,"white");
+          if ( width_char > 2 ) 
+            fprintf(fh, R"--(<text x="%.3f" y="%.3f">%s</text>)--",
+                    xpt + 0.5*font_size, ypt + font_size, name.c_str() );
+          continue;
+        }
       
       // Declaring colors
       string red;
@@ -999,11 +1016,8 @@ RV_Data::generate_timeline_simple()
       string blue = "50"; 
  
 #ifdef HAVE_PAPI
-      if ( ! s.papi.filled() ) continue;
-      {
-      const double text_xpt = xpt + 0.5 * font_size;
       const double baselineskip_ypt = font_size * 1.2;
-	const double text_limit_ypt = ypt + level_to_pt;
+      const double text_limit_ypt = ypt + level_to_pt - baselineskip_ypt;
 	double curr_text_ypt = ypt + font_size;
 	
 	const papi_long n_insn =
@@ -1025,11 +1039,15 @@ RV_Data::generate_timeline_simple()
 	green = to_string(g);
 	red = to_string(r);
 
-	fill_color = "rgb(" + red +"," +green+"," + blue + ")";
-		
-	fprintf(fh, "<rect class=\"%s\" fill=\"%s\" stroke=\"white\" stroke-width=\".75\" "
-		"x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n", 
-		clsName.c_str(), fill_color.c_str(), xpt, ypt, wpt, seg_hpt);
+        const bool composite = timer_is_composite[s.start_event_idx];
+        const char* const stroke_color = "white";
+
+        // If not part of a pattern draw in gray 
+	const string fill_color =
+          !pattern_plot || composite
+          ? "rgb(" + red +"," +green+"," + blue + ")" : "#ccc";
+
+        emit_rect(fill_color,stroke_color);
 
 	// Calculating and drawing bubbles based on stall & rectangle width
 	if (wpt > 10) {
@@ -1066,10 +1084,14 @@ RV_Data::generate_timeline_simple()
 	}
 
 	if ( width_char < 2 ) continue;
+        const double text_xpt = xpt + 0.5 * font_size;
 	fprintf(fh, R"--(<text x="%.3f" y="%.3f">%s</text>)--",
-		xpt + 0.5*font_size, ypt + font_size, name.c_str() );
+		text_xpt, ypt + font_size, name.c_str() );
+
+        const bool show_values = false;
+
+        if ( !show_values ) continue;
 	
-	/*
 	if ( curr_text_ypt < text_limit_ypt )
 	  fprintf(fh, R"--(<text x="%.3f" y="%.3f">L3 %.3f MPKI</text>)--",
 		  text_xpt, curr_text_ypt += baselineskip_ypt,
@@ -1098,12 +1120,13 @@ RV_Data::generate_timeline_simple()
 	    (fh, R"--(<text x="%.3f" y="%.3f">Fullns %.1f%%</text>)--",
 	     text_xpt, curr_text_ypt += baselineskip_ypt,
 	     100.0 * n_cyc_full / max(papi_long(1),n_cyc-n_cyc_stall) );
-	*/
 
       }
 #endif
 
-    }
+  };
+
+  emit_timeline(0,seg_info,false);
 
   vector <int> event_indices;
   {
@@ -1130,12 +1153,12 @@ RV_Data::generate_timeline_simple()
 
   PatternFinder pf2(move(event_indices), events, 2000);
 
+  timer_is_composite.clear();
   vector<RV_Timer_Event> timer_compact;
 
   vector<bool> events_done(events.size());
   timer_compact.push_back( events[0] );
   events_done[0] = true;
-  vector<bool> timer_compact_is_composite;
 
   for ( int i=1; i<events.size(); i++ )
     {
@@ -1158,7 +1181,7 @@ RV_Data::generate_timeline_simple()
           else
             duration += curr.etime_get() - prev.etime_get();
         }
-      timer_compact_is_composite.push_back( back_pairs.size() > 1 );
+      timer_is_composite.push_back( back_pairs.size() > 1 );
       if ( papi_sample )
         {
           papi_sample->cyc += duration;
@@ -1172,29 +1195,7 @@ RV_Data::generate_timeline_simple()
   vector<Seg_Info> seg_compact_info =
     generate_segments(timer_compact,max_level);
 
-  const int sc_to_pt = plot_area_wpt / seg_compact_info.back().end_s;
-
-  for ( auto& s: seg_compact_info )
-    {
-      const bool composite = timer_compact_is_composite[s.start_event_idx];
-
-      // If not part of a pattern draw in gray 
-      const char* const color = composite ? "yellow" : "gray";
-
-      double xpt = s.start_s * sc_to_pt;
-      double wpt = ( s.end_s - s.start_s ) * sc_to_pt;
-      double ypt = s.level * level_to_pt  + (level_to_pt * max_level);
-      string clsName = "timer-" + to_string(s.timer_idx) + "B";
-      string name1 = leaf_name[s.timer_idx] + "B";
-
-      fprintf(fh, "<rect class=\"%s\" fill=\"%s\" stroke=\"white\" stroke-width=\".75\" "
-              "x=\"%.3f\" y=\"%.3f\" width=\"%.3f\" height=\"%.3f\" />\n", 
-              clsName.c_str(), color, xpt, ypt, wpt, seg_hpt);
-      
-      fprintf(fh, R"--(<text x="%.3f" y="%.3f">%s</text>)--",
-	      xpt + 0.5*font_size, ypt + font_size, name1.c_str() );
-
-    }
+  emit_timeline(level_to_pt*max_level,seg_compact_info,true);
 
   fprintf(fh,"%s","</g></svg>\n");
 
