@@ -86,7 +86,7 @@ RV_CTimers::handle_timer_event(int timer_index, RV_Event_Type et)
   if ( timer_index >= timers.size() ) timers.resize(timer_index+1);
   RV_CTimer& t = timers[timer_index];
 
-  const int limit_p_sample_per_timer = 100;
+  const int limit_p_sample_per_timer = 1000;
   const int limit_p_sample_soft = 1;
 
   const bool event_keeps_sample =
