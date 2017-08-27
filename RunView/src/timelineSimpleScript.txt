@@ -1,7 +1,7 @@
 <script type="text/javascript">    
-    $('rect').mouseenter(function () highlight(this));  
-    $('rect').click(function () zoom(this));  
-    $('rect').dblclick(function () reset()); 
+    $('rect').mouseenter(function () { highlight(this); } );  
+    $('rect').click(function () { zoom(this); } );  
+    $('rect').dblclick(function () { reset(); } ); 
 
 function reset() {
     var mySVG = document.getElementsByTagName("svg")[2];

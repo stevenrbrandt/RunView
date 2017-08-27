@@ -1,6 +1,6 @@
 <script type="text/javascript"> 
-     $('#all').find('.myrect').mouseenter( function () colorChange(this) ); 
-     $('#all').find('.myrect').click( function () expand(this) ); 
+     $('#all').find('.myrect').mouseenter( function () { colorChange(this); } );
+     $('#all').find('.myrect').click( function () { expand(this); } );
 
      function colorChange(rect) { 
      var color = rect.getAttribute("fill"); 
