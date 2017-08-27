@@ -15,7 +15,10 @@
 using namespace std; 
 
 // methods 
-PatternFinder::PatternFinder(vector<int> v, int patternLength) {
+PatternFinder::PatternFinder
+(vector<int> v, vector<RV_Timer_Event>& eventsp, int patternLength):
+  events(eventsp)
+{
   pattern_len_limit = patternLength;
   list = v; 
   list_size = v.size();
@@ -55,7 +58,7 @@ void PatternFinder::findRepeatNums() {
 
 void PatternFinder::findPatterns()
 {
-  int max_cover = 0;
+  double max_cover = 0;
   int max_cover_pidx = -1;
   int max_cover_len = -1;
   int max_repeats = -1;
@@ -80,6 +83,13 @@ void PatternFinder::findPatterns()
 
   auto get_level = [&](int a) { return ( a & levmask ) >> 1 ; };
   auto is_start = [&](int a) { return ! ( a & 1 ); };
+  auto get_duration = [&](int pidx, int plen)
+    {
+      const int idx = patterns[pidx];
+      return events[idx+plen].etime_get() - events[idx].etime_get();
+    };
+
+  const double duration = events.back().etime_get() - events[0].etime_get();
 
   for ( int i=1; i<patterns.size(); i++ )
     {
@@ -110,8 +120,9 @@ void PatternFinder::findPatterns()
           assert( done_run.pidx < nearest_pidx );
           nearest_pidx = done_run.pidx;
 
+          const double duration_n = get_duration(done_run.pidx,done_run.len);
           const int repeats = i - done_run.pidx;
-          const int cover = done_run.len * repeats;
+          const double cover = duration_n * repeats;
 
           assert( cover > 0 );
           if ( cover > max_cover && !done_run.overlap )
@@ -121,8 +132,9 @@ void PatternFinder::findPatterns()
               max_cover_pidx = done_run.pidx;
               max_cover_len = done_run.len;
               if ( true )
-                printf("Max cover %d, idx %d, len %d, rpt %d\n",
-                       max_cover, max_cover_pidx, max_cover_len,
+                printf("Max cover %7.3f%%, idx %d, len %d, rpt %d\n",
+                       100.0 * max_cover / duration,
+                       max_cover_pidx, max_cover_len,
                        max_repeats);
             }
         }
