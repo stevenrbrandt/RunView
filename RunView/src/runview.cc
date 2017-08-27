@@ -871,10 +871,12 @@ RV_Data::generate_timeline_simple()
   const double image_wpt = plot_area_wpt;
   const double image_hpt = plot_area_hpt;
 
-  fprintf(fh,"%s",R"~~(<?xml version="1.0" standalone="no"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
-  "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-)~~");
+  fprintf(fh, "%s",
+	  "<html><head>\n"
+	  "<meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\">\n"
+	  "<script src=\"http://code.jquery.com/jquery-latest.min.js\"></script> \n"
+	  "</head><body> \n");
+
 
   fprintf(fh,"%s",
           "<?xml version=\"1.0\" standalone=\"no\"?>\n"
