@@ -1,0 +1,7 @@
+# Configuration definitions for thorn RunView
+
+PROVIDES RunView
+{
+}
+
+REQUIRES RunViewConfig

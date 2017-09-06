@@ -1,0 +1,4 @@
+# Interface definition for thorn RunView
+implements: RunView
+inherits:
+

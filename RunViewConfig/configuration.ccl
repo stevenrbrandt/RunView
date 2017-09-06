@@ -1,0 +1,8 @@
+# Configuration definitions for thorn RunView
+
+PROVIDES RunViewConfig
+{
+  SCRIPT config.pl
+  LANG perl
+}
+
