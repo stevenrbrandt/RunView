@@ -12,6 +12,11 @@
 #include <string.h>
 #include "ctimers.h"
 #include "util.h"
+#include <time.h>
+#include <fstream>
+#include <PatternFinder.h>
+#include <limits.h>
+#include <unistd.h>
 #include "rv_papi.h"
 #include <cmath>
 #include <sys/stat.h>
@@ -937,10 +942,10 @@ RV_Data::generate_timeline_simple()
   // smallest size that's comfortably readable for substantial amounts
   // of text.
   //
-  fprintf(fh,R"~~(<svg width="%.3fpt" height="%.3fpt"
-          viewBox="0 0 %.3f %.3f"
-          version="1.1" xmlns="http://www.w3.org/2000/svg">
-)~~",
+  fprintf(fh,"<svg width=\"%.3fpt\" height=\"%.3fpt\"\n"
+          "viewBox=\"0 0 %.3f %.3f\"\n"
+	  "preserveAspectRatio = \"xMinYMin meet\" "
+          "version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\">\n",
           image_wpt, image_hpt, image_wpt, image_hpt);
 
   fprintf(fh,"%s\n","<desc>Created by RunView</desc>");
