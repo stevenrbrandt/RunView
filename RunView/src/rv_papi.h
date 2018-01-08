@@ -29,7 +29,7 @@ inline papi_long PAPI_get_real_cyc(){ return 0; }
 
 // WARNING: Values are meaningless. They are here to avoid compilation errors.
 enum { PAPI_OK = 0, PAPI_NULL = 0,
-    PAPI_TOT_INS, PAPI_L3_TCM, PAPI_PRF_DM, PAPI_TLB_DM };
+    PAPI_TOT_INS, PAPI_L3_TCM, PAPI_PRF_DM, PAPI_TLB_DM, PAPI_STL_CCY, PAPI_FUL_CCY };
 
 #endif
 

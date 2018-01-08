@@ -20,6 +20,7 @@
 #include "rv_papi.h"
 #include <cmath>
 #include <sys/stat.h>
+#include <functional>
 
 using namespace std;
 
@@ -977,8 +978,11 @@ RV_Data::generate_timeline_simple()
   // Generate SVG for individual segments.
   // Also tracking for pattern recognition
 
+  //typedef std::function<void(double y_offset, vector<Seg_Info>& seg_info, bool pattern_plot)> emit_timeline_type;
+
+  //emit_timeline_type 
   auto emit_timeline = [&]
-    (double y_offset, vector<Seg_Info>& seg_info, bool pattern_plot)
+    (double y_offset, vector<Seg_Info>& seg_info, bool pattern_plot)->void
     {
 
   for ( auto& s: seg_info )
@@ -1014,13 +1018,13 @@ RV_Data::generate_timeline_simple()
                     xpt + 0.5*font_size, ypt + font_size, name.c_str() );
           continue;
         }
+#ifdef HAVE_PAPI
       
       // Declaring colors
       string red;
       string green; 
       string blue = "50"; 
  
-#ifdef HAVE_PAPI
       const double baselineskip_ypt = font_size * 1.2;
       const double text_limit_ypt = ypt + level_to_pt - baselineskip_ypt;
 	double curr_text_ypt = ypt + font_size;
@@ -1126,8 +1130,8 @@ RV_Data::generate_timeline_simple()
 	     text_xpt, curr_text_ypt += baselineskip_ypt,
 	     100.0 * n_cyc_full / max(papi_long(1),n_cyc-n_cyc_stall) );
 
-      }
 #endif
+      }
 
   };
 
